@@ -28,10 +28,10 @@ Rectangle {
     id: root
 
     property int headerWidth: multitrack.trackHeaderWidth
-    property color selectedTrackColor: Qt.rgba(0.8, 0.8, 0, 0.3)
+    property color selectedTrackColor: Qt.rgba(0.23, 0.56, 0.92, 0.18)
     property alias trackCount: tracksRepeater.count
     property bool stopScrolling: false
-    property color shotcutBlue: Qt.rgba(23 / 255, 92 / 255, 118 / 255, 1)
+    property color shotcutBlue: Qt.rgba(96 / 255, 104 / 255, 196 / 255, 1) // Debut Pro video clip color
     property color adjustmentClipColor: Qt.rgba(92 / 255, 72 / 255, 23 / 255, 1)
     property var dragDelta
     property int inlineAudioControlsThreshold: 60

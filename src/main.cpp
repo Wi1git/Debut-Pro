@@ -58,7 +58,7 @@ constexpr const auto kWatchdogEnvVar = "SHOTCUT_WATCHDOG";
 // How long the watchdog parent waits for kStartupReadyMarker before assuming the child is hung.
 constexpr const auto kStartupHangTimeoutMs = 240000;
 // Printed by the child to stdout once its main window is shown; watched for by the parent.
-constexpr const auto kStartupReadyMarker = "[Info   ] Shotcut window shown";
+constexpr const auto kStartupReadyMarker = "[Info   ] Debut Pro window shown";
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
 static QString s_qpaPlatformNote;
@@ -86,8 +86,8 @@ static bool isVulkanDrawMethod(int argc, char **argv, QString *detail)
     if (appDataDir.isEmpty()) {
         QSettings settings(QSettings::NativeFormat,
                            QSettings::UserScope,
-                           QStringLiteral("Meltytech"),
-                           QStringLiteral("Shotcut"));
+                           QStringLiteral("DebutPro"),
+                           QStringLiteral("Debut Pro"));
         appDataDir = settings.value(QStringLiteral("appdatadir")).toString();
         if (appDataDir.isEmpty() || !QFile::exists(appDataDir + QStringLiteral("/shotcut.ini"))) {
             const int value
@@ -177,7 +177,7 @@ public:
 #ifdef Q_OS_WIN
 #include <winbase.h>
         SetDllDirectoryA(appPath.toLocal8Bit());
-        CreateMutexA(NULL, FALSE, "Meltytech Shotcut Running Mutex");
+        CreateMutexA(NULL, FALSE, "Debut Pro Running Mutex");
 #else
         dir.cdUp();
 #endif
@@ -189,14 +189,13 @@ public:
         dir.cd("qt6");
 #endif
         addLibraryPath(dir.absolutePath());
-        setOrganizationName("Meltytech");
+        // Debut Pro keeps its own settings, separate from any Shotcut install.
+        setOrganizationName("DebutPro");
+        setOrganizationDomain("debutpro.app");
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
-        setOrganizationDomain("shotcut.org");
         setDesktopFileName("org.shotcut.Shotcut");
-#else
-        setOrganizationDomain("meltytech.com");
 #endif
-        setApplicationName("Shotcut");
+        setApplicationName("Debut Pro");
         setApplicationVersion(SHOTCUT_VERSION);
 
         // Process command line options.
@@ -206,7 +205,7 @@ public:
 #ifndef Q_OS_WIN
         QCommandLineOption fullscreenOption(
             "fullscreen",
-            QCoreApplication::translate("main", "Fill the screen with the Shotcut window."));
+            QCoreApplication::translate("main", "Fill the screen with the Debut Pro window."));
         parser.addOption(fullscreenOption);
 #endif
         QCommandLineOption noupgradeOption(
@@ -549,7 +548,7 @@ int main(int argc, char **argv)
         QSplashScreen splash(QPixmap(":/icons/shotcut-logo-320x320.png"));
 
         // Log some basic info.
-        LOG_INFO() << "Starting Shotcut version" << SHOTCUT_VERSION;
+        LOG_INFO() << "Starting Debut Pro version" << SHOTCUT_VERSION;
 #if defined(Q_OS_WIN)
         LOG_INFO() << "Windows version" << QSysInfo::productVersion();
 #elif defined(Q_OS_MAC)

@@ -326,6 +326,8 @@ target_sources(shotcut PRIVATE ${QML_SRC})
 
 target_include_directories(shotcut PRIVATE ${CMAKE_SOURCE_DIR}/CuteLogger/include)
 target_compile_definitions(shotcut PRIVATE SHOTCUT_VERSION="${SHOTCUT_VERSION}")
+# Debut Pro: never offer Shotcut upgrades.
+target_compile_definitions(shotcut PRIVATE SHOTCUT_NOUPGRADE)
 
 # Add compile definitions when certain custom cache variables are ON
 if(EXTERNAL_LAUNCHERS)

@@ -14,7 +14,7 @@
    <string notr="true">https://forum.shotcut.org/t/about-the-playlist/12951/1</string>
   </property>
   <property name="windowTitle">
-   <string>Playlist</string>
+   <string>Project</string>
   </property>
   <widget class="QWidget" name="dockWidgetContents">
    <layout class="QVBoxLayout" name="verticalLayout">

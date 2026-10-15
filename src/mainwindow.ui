@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Shotcut</string>
+   <string>Debut Pro</string>
   </property>
   <property name="windowIcon">
    <iconset resource="../icons/resources.qrc">
@@ -420,7 +420,7 @@
   </action>
   <action name="actionAbout_Shotcut">
    <property name="text">
-    <string>&amp;About Shotcut</string>
+    <string>&amp;About Debut Pro</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::AboutRole</enum>
@@ -526,7 +526,7 @@
      <normaloff>:/icons/light/32x32/audio-meter.png</normaloff>:/icons/light/32x32/audio-meter.png</iconset>
    </property>
    <property name="text">
-    <string>Peak Meter</string>
+    <string>Audio Meters</string>
    </property>
    <property name="toolTip">
     <string>Audio Peak Meter</string>
@@ -565,7 +565,7 @@
      <normaloff>:/icons/oxygen/32x32/actions/view-media-playlist.png</normaloff>:/icons/oxygen/32x32/actions/view-media-playlist.png</iconset>
    </property>
    <property name="text">
-    <string>Playlist</string>
+    <string>Project</string>
    </property>
    <property name="whatsThis">
     <string notr="true">https://forum.shotcut.org/t/about-the-playlist/12951/1</string>
@@ -775,10 +775,10 @@
      <normaloff>:/icons/oxygen/32x32/actions/view-filter.png</normaloff>:/icons/oxygen/32x32/actions/view-filter.png</iconset>
    </property>
    <property name="text">
-    <string>Filters</string>
+    <string>Effect Controls</string>
    </property>
    <property name="toolTip">
-    <string>Filters</string>
+    <string>Effect Controls</string>
    </property>
    <property name="whatsThis">
     <string notr="true">https://forum.shotcut.org/t/add-search-remove-and-reorder-filters/48127/1</string>
@@ -1096,7 +1096,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Logging</string>
+    <string>Assembly</string>
    </property>
    <property name="toolTip">
     <string>Switch to the logging layout</string>
@@ -1124,7 +1124,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>FX</string>
+    <string>Effects</string>
    </property>
    <property name="toolTip">
     <string>Switch to the effects layout</string>
@@ -1542,7 +1542,7 @@
      <normaloff>:/icons/oxygen/32x32/apps/system-file-manager.png</normaloff>:/icons/oxygen/32x32/apps/system-file-manager.png</iconset>
    </property>
    <property name="text">
-    <string>Files</string>
+    <string>Media Browser</string>
    </property>
   </action>
   <action name="actionWhatsThis">

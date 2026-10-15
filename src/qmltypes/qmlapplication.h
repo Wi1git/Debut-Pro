@@ -49,7 +49,7 @@ public:
     static QmlApplication &singleton();
     static Qt::WindowModality dialogModality();
     static QPoint mousePos();
-    static QColor playheadColor() { return QColor(0xe0, 0x46, 0x4e); }
+    static QColor playheadColor() { return QColor(0x4a, 0x9e, 0xff); }
     static QColor toolTipBaseColor();
     static QColor toolTipTextColor();
     static QString OS();

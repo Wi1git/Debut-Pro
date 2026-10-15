@@ -92,7 +92,7 @@ Player::Player(QWidget *parent)
     m_tabs->setShape(QTabBar::RoundedSouth);
     m_tabs->setUsesScrollButtons(false);
     m_tabs->addTab(tr("Source"));
-    m_tabs->addTab(tr("Project"));
+    m_tabs->addTab(tr("Program"));
     m_tabs->setTabEnabled(SourceTabIndex, false);
     m_tabs->setTabEnabled(ProjectTabIndex, false);
     QHBoxLayout *tabLayout = new QHBoxLayout;

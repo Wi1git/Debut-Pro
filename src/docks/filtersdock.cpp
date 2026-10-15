@@ -48,7 +48,7 @@ FiltersDock::FiltersDock(MetadataModel *metadataModel,
                          MotionTrackerModel *motionTrackerModel,
                          SubtitlesModel *subtitlesModel,
                          QWidget *parent)
-    : QDockWidget(tr("Filters"), parent)
+    : QDockWidget(tr("Effect Controls"), parent)
     , m_qview(QmlUtilities::sharedEngine(), this)
 {
     LOG_DEBUG() << "begin";

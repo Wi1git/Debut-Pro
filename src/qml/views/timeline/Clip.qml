@@ -88,7 +88,7 @@ Rectangle {
         const last = Math.min(Math.ceil(clipPxW / waveformMaxWidth), Math.ceil(Math.max(localRight, 0) / waveformMaxWidth));
         return Math.min(8, Math.max(0, last - waveformFirstTile));
     }
-    property color clipColor: isBlank ? 'transparent' : isTransition ? 'mediumpurple' : isAudio ? 'darkseagreen' : isAdjustment ? root.adjustmentClipColor : root.shotcutBlue
+    property color clipColor: isBlank ? 'transparent' : isTransition ? '#8a6fc7' : isAudio ? '#3f9a68' : isAdjustment ? root.adjustmentClipColor : root.shotcutBlue
     readonly property real _cornerRadius: 6
     property real _roundLeft: {
         if (isBlank || !trackRoot || trackRoot.clipCount === 0)
@@ -446,7 +446,7 @@ Rectangle {
         id: transitionComponent
 
         Shotcut.TimelineTransition {
-            property var color: isAudio ? 'darkseagreen' : root.shotcutBlue
+            property var color: isAudio ? '#3f9a68' : root.shotcutBlue
 
             anchors.fill: parent
             anchors.margins: selected ? parent.border.width : 0

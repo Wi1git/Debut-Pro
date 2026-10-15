@@ -88,7 +88,7 @@ void AudioPeakMeterScopeWidget::refreshScope(const QSize & /*size*/, bool /*full
 
 QString AudioPeakMeterScopeWidget::getTitle()
 {
-    return tr("Audio Peak Meter");
+    return tr("Audio Meters");
 }
 
 void AudioPeakMeterScopeWidget::setOrientation(Qt::Orientation orientation)

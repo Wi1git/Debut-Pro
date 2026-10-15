@@ -917,37 +917,8 @@ void MainWindow::setupAndConnectDocks()
             &MainWindow::onCreateOrEditFilterOnOutput);
     connect(m_timelineDock->subtitlesModel(), SIGNAL(modified()), this, SLOT(onSubtitleModified()));
 
-    // Left area
-    addDockWidget(Qt::LeftDockWidgetArea, m_propertiesDock);
-    addDockWidget(Qt::LeftDockWidgetArea, m_playlistDock);
-    addDockWidget(Qt::LeftDockWidgetArea, m_filtersDock);
-    addDockWidget(Qt::LeftDockWidgetArea, m_encodeDock);
-    addDockWidget(Qt::LeftDockWidgetArea, m_notesDock);
-    addDockWidget(Qt::LeftDockWidgetArea, m_subtitlesDock);
-    tabifyDockWidget(m_propertiesDock, m_playlistDock);
-    tabifyDockWidget(m_playlistDock, m_filtersDock);
-    tabifyDockWidget(m_filtersDock, m_encodeDock);
-    tabifyDockWidget(m_encodeDock, m_notesDock);
-    tabifyDockWidget(m_notesDock, m_subtitlesDock);
-    // Right area
-    addDockWidget(Qt::RightDockWidgetArea, m_recentDock);
-    addDockWidget(Qt::RightDockWidgetArea, m_historyDock);
-    addDockWidget(Qt::RightDockWidgetArea, m_jobsDock);
-    addDockWidget(Qt::RightDockWidgetArea, m_filesDock);
-    addDockWidget(Qt::RightDockWidgetArea, m_elementsDock);
-    splitDockWidget(m_recentDock, findChild<QDockWidget *>("AudioWaveformDock"), Qt::Vertical);
-    splitDockWidget(audioMeterDock, m_recentDock, Qt::Horizontal);
-    tabifyDockWidget(m_recentDock, m_filesDock);
-    tabifyDockWidget(m_filesDock, m_historyDock);
-    tabifyDockWidget(m_historyDock, m_jobsDock);
-    tabifyDockWidget(m_jobsDock, m_elementsDock);
-    // Bottom area
-    addDockWidget(Qt::BottomDockWidgetArea, m_timelineDock);
-    addDockWidget(Qt::BottomDockWidgetArea, m_keyframesDock);
-    splitDockWidget(m_timelineDock, m_markersDock, Qt::Horizontal);
-    tabifyDockWidget(m_keyframesDock, m_timelineDock);
-    m_recentDock->raise();
-    resetDockCorners();
+    // Debut Pro: Premiere-style workspace (see applyDebutEditingLayout()).
+    applyDebutEditingLayout();
 }
 
 void MainWindow::setupMenuFile()
@@ -1148,7 +1119,7 @@ void MainWindow::setupSettingsMenu()
                        qApp->applicationName(),
                        tr("GPU processing is experimental and does not work on all computers. "
                           "Plan to do some testing after turning this on.\n\n"
-                          "Do you want to enable GPU processing and restart Shotcut?"),
+                          "Do you want to enable GPU processing and restart Debut Pro?"),
                        QMessageBox::No | QMessageBox::Yes,
                        this);
             dialog.setDefaultButton(QMessageBox::Yes);
@@ -1169,7 +1140,7 @@ void MainWindow::setupSettingsMenu()
         } else if (oldMode == ShotcutSettings::Linear10GpuCpu) {
             QMessageBox dialog(QMessageBox::Information,
                                qApp->applicationName(),
-                               tr("Shotcut must restart to disable GPU processing.\n"
+                               tr("Debut Pro must restart to disable GPU processing.\n"
                                   "Disable GPU processing and restart?"),
                                QMessageBox::No | QMessageBox::Yes,
                                this);
@@ -1228,7 +1199,7 @@ void MainWindow::setupSettingsMenu()
         Settings.setPlayerAudioDriver(action->data().toString());
         QMessageBox dialog(QMessageBox::Information,
                            qApp->applicationName(),
-                           tr("You must restart Shotcut to change the audio API.\n"
+                           tr("You must restart Debut Pro to change the audio API.\n"
                               "Do you want to restart now?"),
                            QMessageBox::No | QMessageBox::Yes,
                            this);
@@ -1415,7 +1386,7 @@ void MainWindow::setupSettingsMenu()
         Settings.setPlayerOldVideoOutput(checked);
         QMessageBox dialog(QMessageBox::Information,
                            qApp->applicationName(),
-                           tr("Shotcut must restart to change the video output.\n"
+                           tr("Debut Pro must restart to change the video output.\n"
                               "Restart now?"),
                            QMessageBox::No | QMessageBox::Yes,
                            this);
@@ -1870,8 +1841,8 @@ bool MainWindow::isCompatibleWithProcessingMode(MltXmlChecker &checker,
             QMessageBox::Question,
             qApp->applicationName(),
             tr("The file you opened uses GPU processing, which is not enabled.\n"
-               "Do you want Shotcut to convert it for CPU? Conversion is an approximation.\n\n"
-               "If you choose Yes, Shotcut will create a copy of your project\n"
+               "Do you want Debut Pro to convert it for CPU? Conversion is an approximation.\n\n"
+               "If you choose Yes, Debut Pro will create a copy of your project\n"
                "with \"- Converted for CPU\" in the file name and open it."),
             QMessageBox::No | QMessageBox::Yes,
             this);
@@ -1887,8 +1858,8 @@ bool MainWindow::isCompatibleWithProcessingMode(MltXmlChecker &checker,
         QMessageBox dialog(QMessageBox::Question,
                            qApp->applicationName(),
                            tr("The file you opened uses CPU processing, which is not enabled.\n"
-                              "Do you want Shotcut to convert it for GPU?\n\n"
-                              "If you choose Yes, Shotcut will create a copy of your project\n"
+                              "Do you want Debut Pro to convert it for GPU?\n\n"
+                              "If you choose Yes, Debut Pro will create a copy of your project\n"
                               "with \"- Converted for GPU\" in the file name and open it."),
                            QMessageBox::No | QMessageBox::Yes,
                            this);
@@ -2006,9 +1977,9 @@ bool MainWindow::isXmlRepaired(MltXmlChecker &checker, QString &fileName)
         LOG_WARNING() << fileName;
         QMessageBox dialog(QMessageBox::Question,
                            qApp->applicationName(),
-                           tr("Shotcut noticed some problems in your project.\n"
-                              "Do you want Shotcut to try to repair it?\n\n"
-                              "If you choose Yes, Shotcut will create a copy of your project\n"
+                           tr("Debut Pro noticed some problems in your project.\n"
+                              "Do you want Debut Pro to try to repair it?\n\n"
+                              "If you choose Yes, Debut Pro will create a copy of your project\n"
                               "with \"- Repaired\" in the file name and open it."),
                            QMessageBox::No | QMessageBox::Yes,
                            this);
@@ -2263,10 +2234,98 @@ void MainWindow::resetVideoModeMenu()
 
 void MainWindow::resetDockCorners()
 {
+    // Debut Pro: the left column runs the full height (like a Project panel under
+    // Effect Controls); the timeline sits under the program monitor.
     setCorner(Qt::TopLeftCorner, Qt::LeftDockWidgetArea);
     setCorner(Qt::TopRightCorner, Qt::RightDockWidgetArea);
-    setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
+    setCorner(Qt::BottomLeftCorner, Qt::LeftDockWidgetArea);
     setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
+}
+
+// Debut Pro default "Editing" workspace:
+//   +----------------------+-----------------------------+
+//   | Effect Controls |... |                             |
+//   |                      |       Program monitor       |
+//   +----------------------+                             |
+//   | Project | Media ...  +--------------------------+--+
+//   |                      |  Timeline | Keyframes    |dB|
+//   +----------------------+--------------------------+--+
+void MainWindow::applyDebutEditingLayout()
+{
+    resetDockCorners();
+    QDockWidget *audioMeterDock = findChild<QDockWidget *>("AudioPeakMeterDock");
+    const auto docks = findChildren<QDockWidget *>(QString(), Qt::FindDirectChildrenOnly);
+    for (auto dock : docks) {
+        if (dock->isFloating())
+            dock->setFloating(false);
+        dock->hide();
+    }
+
+    // Left column, top: Effect Controls group
+    addDockWidget(Qt::LeftDockWidgetArea, m_filtersDock);
+    // Left column, bottom: Project group
+    addDockWidget(Qt::LeftDockWidgetArea, m_playlistDock);
+    splitDockWidget(m_filtersDock, m_playlistDock, Qt::Vertical);
+    for (QDockWidget *dock : std::initializer_list<QDockWidget *>{m_propertiesDock,
+                                                                  m_encodeDock,
+                                                                  m_subtitlesDock,
+                                                                  m_notesDock}) {
+        addDockWidget(Qt::LeftDockWidgetArea, dock);
+        tabifyDockWidget(m_filtersDock, dock);
+    }
+    for (QDockWidget *dock : std::initializer_list<QDockWidget *>{m_filesDock,
+                                                                  m_markersDock,
+                                                                  m_historyDock,
+                                                                  m_jobsDock,
+                                                                  m_recentDock,
+                                                                  m_elementsDock}) {
+        addDockWidget(Qt::LeftDockWidgetArea, dock);
+        tabifyDockWidget(m_playlistDock, dock);
+    }
+    // Under the program monitor: Timeline (+ Keyframes tab) and audio meters
+    addDockWidget(Qt::BottomDockWidgetArea, m_timelineDock);
+    if (audioMeterDock) {
+        audioMeterDock->show();
+        addDockWidget(Qt::BottomDockWidgetArea, audioMeterDock, Qt::Horizontal);
+        splitDockWidget(m_timelineDock, audioMeterDock, Qt::Horizontal);
+    }
+    addDockWidget(Qt::BottomDockWidgetArea, m_keyframesDock);
+    tabifyDockWidget(m_timelineDock, m_keyframesDock);
+    // Any other panel (scopes, etc.) stays hidden on the right until opened.
+    for (auto dock : docks) {
+        if (dockWidgetArea(dock) == Qt::NoDockWidgetArea)
+            addDockWidget(Qt::RightDockWidgetArea, dock);
+    }
+
+    for (QDockWidget *dock : std::initializer_list<QDockWidget *>{m_filtersDock,
+                                                                  m_propertiesDock,
+                                                                  m_encodeDock,
+                                                                  m_playlistDock,
+                                                                  m_filesDock,
+                                                                  m_markersDock,
+                                                                  m_historyDock,
+                                                                  m_timelineDock,
+                                                                  m_keyframesDock,
+                                                                  audioMeterDock}) {
+        if (dock)
+            dock->show();
+    }
+    m_filtersDock->raise();
+    m_playlistDock->raise();
+    m_timelineDock->raise();
+    resizeDebutEditingDocks();
+    QTimer::singleShot(0, this, &MainWindow::resizeDebutEditingDocks);
+}
+
+void MainWindow::resizeDebutEditingDocks()
+{
+    const int w = qMax(width(), 1280);
+    const int h = qMax(height(), 720);
+    resizeDocks({m_filtersDock}, {int(w * 0.33)}, Qt::Horizontal);
+    resizeDocks({m_filtersDock, m_playlistDock}, {int(h * 0.47), int(h * 0.53)}, Qt::Vertical);
+    resizeDocks({m_timelineDock}, {int(h * 0.47)}, Qt::Vertical);
+    if (auto audioMeterDock = findChild<QDockWidget *>("AudioPeakMeterDock"))
+        resizeDocks({audioMeterDock}, {72}, Qt::Horizontal);
 }
 
 void MainWindow::showIncompatibleProjectMessage(const QString &shotcutVersion)
@@ -2748,7 +2807,7 @@ void MainWindow::readWindowSettings()
             Settings.setDockLayoutVersion(kDockLayoutVersion);
         }
     } else {
-        restoreState(kLayoutEditingDefault);
+        applyDebutEditingLayout();
     }
     LOG_DEBUG() << "end";
 }
@@ -3104,14 +3163,16 @@ void MainWindow::on_actionAbout_Shotcut_triggered()
         "Copyright &copy; 2011-2026 <a href=\"https://www.meltytech.com/\">Meltytech</a>, LLC");
     const auto license = QStringLiteral(
         "<a href=\"https://www.gnu.org/licenses/gpl.html\">GNU General Public License v3.0</a>");
-    const auto url = QStringLiteral("https://www.shotcut.org/");
+    const auto url = QStringLiteral("https://github.com/Wi1git/debut-pro");
     QMessageBox::about(
         this,
         tr("About %1").arg(qApp->applicationName()),
         QStringLiteral(
-            "<h1>Shotcut version %2</h1>"
-            "<p><a href=\"%3\">%1</a> is a free, open source, cross platform video editor.</p>"
-            "<small><p>%4</p>"
+            "<h1>%1 version %2</h1>"
+            "<p>%1 is a personal, lightweight video editor based on "
+            "<a href=\"https://www.shotcut.org/\">Shotcut</a>, the free, open source, cross "
+            "platform video editor.</p>"
+            "<small><p>Shotcut is %4</p>"
             "<p>Licensed under the %5</p>"
             "<p>This program proudly uses the following projects:<ul>"
             "<li><a href=\"https://www.qt.io/\">Qt</a> application and UI framework</li>"
@@ -4194,41 +4255,82 @@ void MainWindow::changeTheme(const QString &theme)
 #endif
 #else
     if (mytheme == kThemeDark) {
+        // Debut Pro dark theme: charcoal panels on a near-black frame, blue accent.
         QApplication::setStyle(kStyleFusion);
+        const QColor accent(0x3b, 0x8e, 0xea);
         QPalette palette;
-        palette.setColor(QPalette::Window, QColor(50, 50, 50));
-        palette.setColor(QPalette::WindowText, QColor(220, 220, 220));
-        palette.setColor(QPalette::Base, QColor(30, 30, 30));
-        palette.setColor(QPalette::AlternateBase, QColor(40, 40, 40));
-        palette.setColor(QPalette::Highlight, QColor(23, 92, 118));
+        palette.setColor(QPalette::Window, QColor(0x23, 0x23, 0x23));
+        palette.setColor(QPalette::WindowText, QColor(0xc4, 0xc4, 0xc4));
+        palette.setColor(QPalette::Base, QColor(0x1b, 0x1b, 0x1b));
+        palette.setColor(QPalette::AlternateBase, QColor(0x26, 0x26, 0x26));
+        palette.setColor(QPalette::Highlight, accent);
         palette.setColor(QPalette::HighlightedText, Qt::white);
-        palette.setColor(QPalette::ToolTipBase, palette.color(QPalette::Highlight));
-        palette.setColor(QPalette::ToolTipText, palette.color(QPalette::WindowText));
+        palette.setColor(QPalette::ToolTipBase, QColor(0x3a, 0x3a, 0x3a));
+        palette.setColor(QPalette::ToolTipText, QColor(0xe6, 0xe6, 0xe6));
         palette.setColor(QPalette::Text, palette.color(QPalette::WindowText));
         palette.setColor(QPalette::BrightText, Qt::red);
-        palette.setColor(QPalette::Button, palette.color(QPalette::Window));
+        palette.setColor(QPalette::Button, QColor(0x2e, 0x2e, 0x2e));
         palette.setColor(QPalette::ButtonText, palette.color(QPalette::WindowText));
-        palette.setColor(QPalette::Link, palette.color(QPalette::Highlight).lighter());
-        palette.setColor(QPalette::LinkVisited, palette.color(QPalette::Highlight));
-        palette.setColor(QPalette::PlaceholderText, palette.color(QPalette::Text).darker());
-        palette.setColor(QPalette::Disabled, QPalette::Base, palette.color(QPalette::Base).darker());
-        palette.setColor(QPalette::Disabled, QPalette::Text, palette.color(QPalette::Text).darker());
-        palette.setColor(QPalette::Disabled, QPalette::ButtonText, Qt::darkGray);
+        palette.setColor(QPalette::Light, QColor(0x3a, 0x3a, 0x3a));
+        palette.setColor(QPalette::Midlight, QColor(0x30, 0x30, 0x30));
+        palette.setColor(QPalette::Mid, QColor(0x1e, 0x1e, 0x1e));
+        palette.setColor(QPalette::Dark, QColor(0x16, 0x16, 0x16));
+        palette.setColor(QPalette::Shadow, QColor(0x0c, 0x0c, 0x0c));
+        palette.setColor(QPalette::Link, accent.lighter(125));
+        palette.setColor(QPalette::LinkVisited, accent);
+        palette.setColor(QPalette::PlaceholderText, QColor(0x7a, 0x7a, 0x7a));
+        palette.setColor(QPalette::Disabled, QPalette::Base, QColor(0x1f, 0x1f, 0x1f));
+        palette.setColor(QPalette::Disabled, QPalette::Text, QColor(0x6a, 0x6a, 0x6a));
+        palette.setColor(QPalette::Disabled, QPalette::WindowText, QColor(0x6a, 0x6a, 0x6a));
+        palette.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(0x6a, 0x6a, 0x6a));
         palette.setColor(QPalette::Disabled, QPalette::Light, Qt::transparent);
         QApplication::setPalette(palette);
         qApp->setStyleSheet(QStringLiteral(
-            "QTabBar::tab { background: #232323; color: #aaaaaa; padding: 4px 8px;"
-            " border: 1px solid #1a1a1a; }"
-            "QTabBar::tab:top { border-bottom: none;"
-            " border-top-left-radius: 4px; border-top-right-radius: 4px; }"
-            "QTabBar::tab:bottom { border-top: none;"
-            " border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; }"
-            "QTabBar::tab:selected { background: #323232; color: #dcdcdc; }"
-            "QTabBar::tab:top:selected { background: #404040; border-top: 2px solid #175c76; }"
-            "QTabBar::tab:bottom:selected { border-bottom: 2px solid #175c76; }"
-            "QTabBar::tab:hover:!selected { background: #2a2a2a; }"
-            "QTabBar::tab:top:!selected { margin-top: 2px; }"
-            "QTabBar::tab:bottom:!selected { margin-bottom: 2px; }"));
+            "QMainWindow { background: #121212; }"
+            "QMainWindow::separator { background: #121212; width: 4px; height: 4px; }"
+            "QMainWindow::separator:hover { background: #3b8eea; }"
+            "QDockWidget { color: #9a9a9a; titlebar-close-icon: none; }"
+            "QDockWidget::title { background: #1e1e1e; padding: 5px 8px; text-align: left;"
+            " border-bottom: 1px solid #151515; }"
+            "QToolBar { background: #1e1e1e; border: none; spacing: 2px; padding: 2px; }"
+            "QToolBar::separator { background: #333333; width: 1px; margin: 4px 6px; }"
+            "QToolButton { border: 1px solid transparent; border-radius: 3px; padding: 2px; }"
+            "QToolButton:hover { background: #343434; border-color: #3d3d3d; }"
+            "QToolButton:checked { background: #2b3f57; border-color: #3b8eea; }"
+            "QToolButton:pressed { background: #1a1a1a; }"
+            "QMenuBar { background: #1a1a1a; color: #c4c4c4; }"
+            "QMenuBar::item:selected { background: #333333; }"
+            "QMenu { background: #262626; border: 1px solid #3a3a3a; padding: 4px 0; }"
+            "QMenu::item { padding: 4px 24px 4px 20px; }"
+            "QMenu::item:selected { background: #3b8eea; color: white; }"
+            "QMenu::separator { height: 1px; background: #3a3a3a; margin: 4px 8px; }"
+            "QTabWidget::pane { border: none; }"
+            "QTabBar { background: #1e1e1e; }"
+            "QTabBar::tab { background: transparent; color: #8c8c8c; padding: 5px 10px;"
+            " border: none; border-bottom: 2px solid transparent; }"
+            "QTabBar::tab:selected { color: #e8e8e8; border-bottom: 2px solid #3b8eea; }"
+            "QTabBar::tab:top:selected { border-bottom: 2px solid #3b8eea; }"
+            "QTabBar::tab:bottom:selected { border-bottom: none; border-top: 2px solid #3b8eea; }"
+            "QTabBar::tab:hover:!selected { color: #c8c8c8; }"
+            "QScrollBar:vertical { background: #1b1b1b; width: 10px; margin: 0; }"
+            "QScrollBar:horizontal { background: #1b1b1b; height: 10px; margin: 0; }"
+            "QScrollBar::handle { background: #4a4a4a; border-radius: 4px; min-height: 24px;"
+            " min-width: 24px; margin: 2px; }"
+            "QScrollBar::handle:hover { background: #5e5e5e; }"
+            "QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }"
+            "QScrollBar::add-page, QScrollBar::sub-page { background: none; }"
+            "QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QTimeEdit {"
+            " background: #1b1b1b; border: 1px solid #3a3a3a; border-radius: 3px; padding: 2px 4px; }"
+            "QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {"
+            " border-color: #3b8eea; }"
+            "QPushButton { background: #333333; border: 1px solid #444444; border-radius: 3px;"
+            " padding: 4px 12px; }"
+            "QPushButton:hover { background: #3d3d3d; }"
+            "QPushButton:default { border-color: #3b8eea; }"
+            "QHeaderView::section { background: #262626; color: #9a9a9a; border: none;"
+            " border-right: 1px solid #1b1b1b; padding: 4px; }"
+            "QToolTip { background: #3a3a3a; color: #e6e6e6; border: 1px solid #4a4a4a; }"
+            "QStatusBar { background: #1a1a1a; }"));
         QIcon::setThemeName(kThemeDark);
         ::qputenv("QT_QUICK_CONTROLS_CONF", ":/resources/qtquickcontrols2-dark.conf");
     } else if (mytheme == "light") {
@@ -4725,7 +4827,7 @@ void MainWindow::onLanguageTriggered(QAction *action)
     Settings.setLanguage(action->data().toString());
     QMessageBox dialog(QMessageBox::Information,
                        qApp->applicationName(),
-                       tr("You must restart Shotcut to switch to the new language.\n"
+                       tr("You must restart Debut Pro to switch to the new language.\n"
                           "Do you want to restart now?"),
                        QMessageBox::No | QMessageBox::Yes,
                        this);
@@ -5235,7 +5337,7 @@ bool MainWindow::confirmProfileChange()
     QMessageBox dialog(QMessageBox::Warning,
                        QCoreApplication::applicationName(),
                        tr("<p>Please review your entire project after making this change.</p>"
-                          "<p>Shotcut does not automatically adjust things that are sensitive to "
+                          "<p>Debut Pro does not automatically adjust things that are sensitive to "
                           "size and position if you change resolution or aspect ratio.</p"
                           "<br>The timing of edits and keyframes may be slightly different if you "
                           "change frame rate.</p>"
@@ -5259,7 +5361,7 @@ bool MainWindow::confirmRestartExternalMonitor()
 {
     QMessageBox dialog(QMessageBox::Information,
                        qApp->applicationName(),
-                       tr("Shotcut must restart to change external monitoring.\n"
+                       tr("Debut Pro must restart to change external monitoring.\n"
                           "Do you want to restart now?"),
                        QMessageBox::No | QMessageBox::Yes,
                        this);
@@ -5498,7 +5600,7 @@ void MainWindow::onDrawingMethodTriggered(QAction *action)
     Settings.setDrawMethod(action->data().toInt());
     QMessageBox dialog(QMessageBox::Information,
                        qApp->applicationName(),
-                       tr("You must restart Shotcut to change the display method.\n"
+                       tr("You must restart Debut Pro to change the display method.\n"
                           "Do you want to restart now?"),
                        QMessageBox::No | QMessageBox::Yes,
                        this);
@@ -5518,7 +5620,7 @@ void MainWindow::onGpuAdapterTriggered(QAction *action)
     Settings.setGpuAdapterDeviceId(action->property("deviceId").toUInt());
     QMessageBox dialog(QMessageBox::Information,
                        qApp->applicationName(),
-                       tr("You must restart Shotcut to change the graphics adapter.\n"
+                       tr("You must restart Debut Pro to change the graphics adapter.\n"
                           "Do you want to restart now?"),
                        QMessageBox::No | QMessageBox::Yes,
                        this);
@@ -5614,7 +5716,7 @@ void MainWindow::onUpgradeCheckFinished(QNetworkReply *reply)
             if (current != "adhoc"
                 && QVersionNumber::fromString(current) < QVersionNumber::fromString(latest)) {
                 QAction *action = new QAction(
-                    tr("Shotcut version %1 is available! Click here to get it.").arg(latest), 0);
+                    tr("Debut Pro version %1 is available! Click here to get it.").arg(latest), 0);
                 connect(action, SIGNAL(triggered(bool)), SLOT(onUpgradeTriggered()));
                 if (!json.object().value("url").isUndefined()) {
                     const QString candidate = json.object().value("url").toString();
@@ -5767,7 +5869,7 @@ void MainWindow::on_actionAppDataSet_triggered()
 {
     QMessageBox dialog(QMessageBox::Information,
                        qApp->applicationName(),
-                       tr("You must restart Shotcut to change the data directory.\n"
+                       tr("You must restart Debut Pro to change the data directory.\n"
                           "Do you want to continue?"),
                        QMessageBox::No | QMessageBox::Yes,
                        this);
@@ -5990,8 +6092,7 @@ void MainWindow::on_actionLayoutEditing_triggered()
     Settings.setLayoutMode(LayoutMode::Editing);
     auto state = Settings.layoutState(QString(kReservedLayoutPrefix).arg(LayoutMode::Editing));
     if (state.isEmpty()) {
-        restoreState(kLayoutEditingDefault);
-        //        resetDockCorners();
+        applyDebutEditingLayout();
     } else {
         //        LOG_DEBUG() << state.toBase64();
         restoreState(state);
@@ -6383,7 +6484,7 @@ void MainWindow::onSceneGraphInitialized()
                    qApp->applicationName(),
                    tr("GPU processing is EXPERIMENTAL, UNSTABLE and UNSUPPORTED! Unsupported "
                       "means do not report bugs about it.\n\n"
-                      "Do you want to disable GPU processing and restart Shotcut?"),
+                      "Do you want to disable GPU processing and restart Debut Pro?"),
                    QMessageBox::No | QMessageBox::Yes,
                    this);
         dialog.setDefaultButton(QMessageBox::Yes);
@@ -7005,7 +7106,7 @@ void MainWindow::on_actionReset_triggered()
     QMessageBox
         dialog(QMessageBox::Question,
                qApp->applicationName(),
-               tr("This will reset <b>all</b> settings, and Shotcut must restart afterwards.\n"
+               tr("This will reset <b>all</b> settings, and Debut Pro must restart afterwards.\n"
                   "Do you want to reset and restart now?"),
                QMessageBox::No | QMessageBox::Yes,
                this);
@@ -7042,7 +7143,7 @@ void MainWindow::on_actionLeaveSafeMode_triggered()
     if (Settings.safeMode()) {
         QMessageBox dialog(QMessageBox::Question,
                            qApp->applicationName(),
-                           tr("Safe mode may have enabled because Shotcut crashed during startup.\n"
+                           tr("Safe mode may have enabled because Debut Pro crashed during startup.\n"
                               "Safe mode disables external plugins.\n"
                               "\n"
                               "Do you want to turn off safe mode and restart now?"),

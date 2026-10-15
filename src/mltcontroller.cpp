@@ -359,7 +359,7 @@ bool Controller::enableJack(bool enable)
     if (!m_consumer)
         return true;
     if (enable && !m_jackFilter) {
-        m_jackFilter.reset(new Mlt::Filter(profile(), "jack", "Shotcut player"));
+        m_jackFilter.reset(new Mlt::Filter(profile(), "jack", "Debut Pro player"));
         if (m_jackFilter->is_valid()) {
             m_jackFilter->set("channels", Settings.playerAudioChannels());
             switch (Settings.playerAudioChannels()) {

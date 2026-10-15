@@ -3563,7 +3563,7 @@ bool MultitrackModel::warnIfInvalid(Mlt::Service &service)
         LongUiTask::cancel();
         QMessageBox::critical(&MAIN,
                               qApp->applicationName(),
-                              tr("Error: Shotcut could not find the %1 plugin on your system.\n\n"
+                              tr("Error: Debut Pro could not find the %1 plugin on your system.\n\n"
                                  "Please install the %2 plugins.")
                                   .arg(plugin)
                                   .arg(plugins));

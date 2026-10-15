@@ -8,14 +8,18 @@
 	<string>APPL</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Debut Pro</string>
+	<key>CFBundleDisplayName</key>
+	<string>Debut Pro</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2011-2026 Meltytech, LLC</string>
+	<string>Debut Pro, based on Shotcut. Shotcut is Copyright © 2011-2026 Meltytech, LLC. GPLv3.</string>
 	<key>CFBundleSignature</key>
-	<string>scut</string>
+	<string>dbpr</string>
 	<key>CFBundleExecutable</key>
 	<string>Shotcut</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.Meltytech.Shotcut</string>
+	<string>app.debutpro.DebutPro</string>
 	<key>CFBundleVersion</key>
 	<string>@SHOTCUT_VERSION@</string>
 	<key>CFBundleShortVersionString</key>
@@ -27,9 +31,9 @@
     <key>LSMinimumSystemVersion</key>
 	<string>12.0.0</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Shotcut can show and record video</string>
+	<string>Debut Pro can show and record video</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Shotcut can monitor and record audio</string>
+	<string>Debut Pro can monitor and record audio</string>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>

@@ -307,7 +307,7 @@ void ShotcutSettings::setShowToolBar(bool b)
 
 bool ShotcutSettings::textUnderIcons() const
 {
-    return settings.value("textUnderIcons", true).toBool();
+    return settings.value("textUnderIcons", false).toBool();
 }
 
 void ShotcutSettings::setTextUnderIcons(bool b)
@@ -322,7 +322,7 @@ void ShotcutSettings::setTextUnderIcons(bool b)
 
 bool ShotcutSettings::smallIcons() const
 {
-    return settings.value("smallIcons", false).toBool();
+    return settings.value("smallIcons", true).toBool();
 }
 
 void ShotcutSettings::setSmallIcons(bool b)
@@ -1558,7 +1558,7 @@ void ShotcutSettings::setSafeMode(bool value)
 
 bool ShotcutSettings::noUpgrade() const
 {
-    return settings.value("noupgrade", false).toBool();
+    return settings.value("noupgrade", true).toBool(); // Debut Pro: no Shotcut upgrade prompts
 }
 
 void ShotcutSettings::setNoUpgrade(bool value)
