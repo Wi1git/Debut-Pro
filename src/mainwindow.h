@@ -176,7 +176,7 @@ private:
     void setVideoModeMenu();
     void resetVideoModeMenu();
     void resetDockCorners();
-    void applyDebutEditingLayout();
+    void applyDebutEditingLayout(bool deferResize = true);
     void resizeDebutEditingDocks();
     void showIncompatibleProjectMessage(const QString &shotcutVersion);
     void restartAfterChangeTheme();

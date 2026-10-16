@@ -28,7 +28,7 @@ and **Alt means ⌥ Option**. You can change any shortcut in Settings → Keyboa
 | Lift (delete, leave a gap) | Delete / Backspace |
 | Ripple delete (close the gap) | Shift+Delete, or Alt+Backspace (Mac: ⌥ Delete) |
 | Cut / copy / paste clips | Ctrl+X / Ctrl+C / Ctrl+V |
-| Paste effects (copied in Effect Controls) | Ctrl+Shift+V |
+| Paste effects (copied in Effect Controls) | Ctrl+Alt+V |
 | Group / ungroup | Ctrl+G / Ctrl+Shift+G |
 | Default video transition (cross dissolve, 1 s) | Ctrl+D |
 | Default audio crossfade (audio tracks) | Ctrl+Shift+D |

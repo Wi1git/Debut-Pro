@@ -1719,7 +1719,8 @@ void TimelineDock::setupActions()
     Actions.add("timelineAlignToReferenceAction", action);
 
     action = new QAction(tr("Apply Copied Filters"), this);
-    action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V));
+    // Premiere: Paste Attributes. (Ctrl+Shift+V stays "paste text only" in text editors.)
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_V));
     action->setEnabled(false);
     connect(action, &QAction::triggered, this, [&]() {
         if (m_selection.selectedClips.length() > 0) {

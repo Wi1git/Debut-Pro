@@ -925,7 +925,8 @@ void MainWindow::setupAndConnectDocks()
     connect(m_timelineDock->subtitlesModel(), SIGNAL(modified()), this, SLOT(onSubtitleModified()));
 
     // Debut Pro: Premiere-style workspace (see applyDebutEditingLayout()).
-    applyDebutEditingLayout();
+    // No deferred resize here: readWindowSettings() may still restore the user's saved sizes.
+    applyDebutEditingLayout(false);
 }
 
 void MainWindow::setupMenuFile()
@@ -2259,7 +2260,7 @@ void MainWindow::resetDockCorners()
 //   | Project | Media ...  +--------------------------+--+
 //   |                      |  Timeline | Keyframes    |dB|
 //   +----------------------+--------------------------+--+
-void MainWindow::applyDebutEditingLayout()
+void MainWindow::applyDebutEditingLayout(bool deferResize)
 {
     resetDockCorners();
     QDockWidget *audioMeterDock = findChild<QDockWidget *>("AudioPeakMeterDock");
@@ -2323,7 +2324,8 @@ void MainWindow::applyDebutEditingLayout()
     m_playlistDock->raise();
     m_timelineDock->raise();
     resizeDebutEditingDocks();
-    QTimer::singleShot(0, this, &MainWindow::resizeDebutEditingDocks);
+    if (deferResize) // once the window has its final size
+        QTimer::singleShot(0, this, &MainWindow::resizeDebutEditingDocks);
 }
 
 void MainWindow::resizeDebutEditingDocks()
@@ -2817,6 +2819,7 @@ void MainWindow::readWindowSettings()
         }
     } else {
         applyDebutEditingLayout();
+        Settings.setDockLayoutVersion(kDockLayoutVersion);
     }
     LOG_DEBUG() << "end";
 }

@@ -40,6 +40,7 @@
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
 #include <QTimer>
+#include <QThreadPool>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QtMath>
 #include <QtWidgets>
@@ -2901,7 +2902,11 @@ void EncodeDock::autoDetectHardwareEncoders()
     });
     const auto ffmpegPath = QFileInfo(qApp->applicationDirPath(), "ffmpeg").absoluteFilePath();
     const auto cancel = m_hwAutoDetectCancel;
-    watcher->setFuture(QtConcurrent::run([ffmpegPath, cancel]() {
+    // A private single-thread pool, so slow probes never tie up QThreadPool::globalInstance(),
+    // which the timeline's undo and audio-level tasks share.
+    auto pool = new QThreadPool(watcher);
+    pool->setMaxThreadCount(1);
+    watcher->setFuture(QtConcurrent::run(pool, [ffmpegPath, cancel]() {
         QStringList hwlist;
         for (const QString &codec : codecs()) {
             if (*cancel)
