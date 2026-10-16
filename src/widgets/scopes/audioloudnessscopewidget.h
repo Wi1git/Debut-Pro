@@ -65,7 +65,7 @@ private:
     bool m_newData;
 
     // Members accessed by GUI thread.
-    Qt::Orientation m_orientation;
+    int m_orientation{-1}; // Qt::Orientation, or -1 before the first setOrientation()
     QQuickWidget *m_qview;
     QLabel *m_timeLabel;
     QTimer *m_timer;

@@ -54,7 +54,7 @@ private:
     void updateToolTip();
     QRectF m_graphRect;
     QSizeF m_barSize;
-    Qt::Orientation m_orient;
+    Qt::Orientation m_orient{Qt::Vertical};
     QVector<double> m_levels;
     QVector<double> m_peaks;
     QVector<int> m_dbLabels;

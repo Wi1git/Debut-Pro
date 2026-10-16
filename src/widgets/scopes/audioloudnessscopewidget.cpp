@@ -47,7 +47,6 @@ AudioLoudnessScopeWidget::AudioLoudnessScopeWidget()
     , m_peak(-100)
     , m_true_peak(-100)
     , m_newData(false)
-    , m_orientation((Qt::Orientation) -1)
     , m_qview(new QQuickWidget(QmlUtilities::sharedEngine(), this))
     , m_timeLabel(new QLabel(this))
 {
@@ -186,7 +185,7 @@ void AudioLoudnessScopeWidget::setOrientation(Qt::Orientation orientation)
 
 void AudioLoudnessScopeWidget::setOrientation(Qt::Orientation orientation, bool force)
 {
-    if (force || orientation != m_orientation) {
+    if (force || int(orientation) != m_orientation) {
         if (orientation == Qt::Vertical) {
             // Calculate the minimum width
             int x = 0;
@@ -236,7 +235,7 @@ void AudioLoudnessScopeWidget::onResetButtonClicked()
 {
     m_loudnessFilter->set("reset", 1);
     m_timeLabel->setText("00:00:00:00");
-    setOrientation(m_orientation, true);
+    setOrientation(m_orientation < 0 ? Qt::Vertical : Qt::Orientation(m_orientation), true);
     resetQview();
 }
 
@@ -244,7 +243,7 @@ void AudioLoudnessScopeWidget::onIntegratedToggled(bool checked)
 {
     m_loudnessFilter->set("calc_program", checked);
     Settings.setLoudnessScopeShowMeter("integrated", checked);
-    setOrientation(m_orientation, true);
+    setOrientation(m_orientation < 0 ? Qt::Vertical : Qt::Orientation(m_orientation), true);
     resetQview();
 }
 
@@ -252,7 +251,7 @@ void AudioLoudnessScopeWidget::onShorttermToggled(bool checked)
 {
     m_loudnessFilter->set("calc_shortterm", checked);
     Settings.setLoudnessScopeShowMeter("shortterm", checked);
-    setOrientation(m_orientation, true);
+    setOrientation(m_orientation < 0 ? Qt::Vertical : Qt::Orientation(m_orientation), true);
     resetQview();
 }
 
@@ -260,7 +259,7 @@ void AudioLoudnessScopeWidget::onMomentaryToggled(bool checked)
 {
     m_loudnessFilter->set("calc_momentary", checked);
     Settings.setLoudnessScopeShowMeter("momentary", checked);
-    setOrientation(m_orientation, true);
+    setOrientation(m_orientation < 0 ? Qt::Vertical : Qt::Orientation(m_orientation), true);
     resetQview();
 }
 
@@ -268,7 +267,7 @@ void AudioLoudnessScopeWidget::onRangeToggled(bool checked)
 {
     m_loudnessFilter->set("calc_range", checked);
     Settings.setLoudnessScopeShowMeter("range", checked);
-    setOrientation(m_orientation, true);
+    setOrientation(m_orientation < 0 ? Qt::Vertical : Qt::Orientation(m_orientation), true);
     resetQview();
 }
 
@@ -276,7 +275,7 @@ void AudioLoudnessScopeWidget::onPeakToggled(bool checked)
 {
     m_loudnessFilter->set("calc_peak", checked);
     Settings.setLoudnessScopeShowMeter("peak", checked);
-    setOrientation(m_orientation, true);
+    setOrientation(m_orientation < 0 ? Qt::Vertical : Qt::Orientation(m_orientation), true);
     resetQview();
 }
 
@@ -284,7 +283,7 @@ void AudioLoudnessScopeWidget::onTruePeakToggled(bool checked)
 {
     m_loudnessFilter->set("calc_true_peak", checked);
     Settings.setLoudnessScopeShowMeter("truepeak", checked);
-    setOrientation(m_orientation, true);
+    setOrientation(m_orientation < 0 ? Qt::Vertical : Qt::Orientation(m_orientation), true);
     resetQview();
 }
 

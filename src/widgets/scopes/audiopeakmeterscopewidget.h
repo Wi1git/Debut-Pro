@@ -41,7 +41,7 @@ private:
 
     // Members accessed by GUI thread.
     AudioMeterWidget *m_audioMeter;
-    Qt::Orientation m_orientation;
+    int m_orientation{-1}; // Qt::Orientation, or -1 before the first setOrientation()
     int m_channels;
 
 private slots:

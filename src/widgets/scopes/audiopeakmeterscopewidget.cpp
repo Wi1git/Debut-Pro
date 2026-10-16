@@ -29,7 +29,6 @@
 AudioPeakMeterScopeWidget::AudioPeakMeterScopeWidget()
     : ScopeWidget("AudioPeakMeter")
     , m_audioMeter(0)
-    , m_orientation((Qt::Orientation) -1)
     , m_channels(Settings.playerAudioChannels())
 {
     LOG_DEBUG() << "begin";
@@ -93,7 +92,7 @@ QString AudioPeakMeterScopeWidget::getTitle()
 
 void AudioPeakMeterScopeWidget::setOrientation(Qt::Orientation orientation)
 {
-    if (orientation != m_orientation) {
+    if (int(orientation) != m_orientation) {
         m_orientation = orientation;
         m_audioMeter->setOrientation(orientation);
         reconfigureMeter();
