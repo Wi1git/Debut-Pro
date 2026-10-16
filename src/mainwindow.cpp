@@ -2919,6 +2919,7 @@ void MainWindow::setupActions()
     // they are added to something visible.
     addAction(Actions["timelineMergeWithNextAction"]);
     addAction(Actions["timelineDetachAudioAction"]);
+    addAction(Actions["timelineSplitStereoAction"]);
     addAction(Actions["timelineAlignToReferenceAction"]);
     addAction(Actions["timelineUpdateThumbnailsAction"]);
     addAction(Actions["timelineRebuildAudioWaveformAction"]);

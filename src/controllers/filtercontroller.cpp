@@ -30,10 +30,12 @@
 #include <MltLink.h>
 #include <QApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QTimerEvent>
+#include <QXmlStreamReader>
 
 static bool isExperimentalEnabled()
 {
@@ -415,6 +417,43 @@ bool FilterController::isOutputTrackSelected() const
            && m_attachedModel.rowCount() == 0;
 }
 
+// Whether every filter in a filter set file is an audio filter, in which case the set is also
+// listed with the audio filters (for example the stock "Left Channel Only").
+static bool isAudioFilterSet(FilterController *controller, const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+    QXmlStreamReader xml(&file);
+    bool inFilter = false;
+    int filterCount = 0;
+    QString service;
+    QString uniqueId;
+    while (!xml.atEnd()) {
+        xml.readNext();
+        if (xml.isStartElement()) {
+            if (xml.name() == QLatin1String("filter")) {
+                inFilter = true;
+                service.clear();
+                uniqueId.clear();
+            } else if (inFilter && xml.name() == QLatin1String("property")) {
+                const auto name = xml.attributes().value(QLatin1String("name"));
+                if (name == QLatin1String("mlt_service"))
+                    service = xml.readElementText();
+                else if (name == QLatin1String(kShotcutFilterProperty))
+                    uniqueId = xml.readElementText();
+            }
+        } else if (xml.isEndElement() && xml.name() == QLatin1String("filter")) {
+            inFilter = false;
+            QmlMetadata *meta = controller->metadata(uniqueId.isEmpty() ? service : uniqueId);
+            if (!meta || !meta->isAudio())
+                return false;
+            ++filterCount;
+        }
+    }
+    return filterCount > 0 && !xml.hasError();
+}
+
 void FilterController::loadFilterSets()
 {
     auto dir = QmlApplication::dataDir();
@@ -428,6 +467,7 @@ void FilterController::loadFilterSets()
             else
                 meta->setName(s);
             meta->set_mlt_service("stock");
+            meta->setIsAudio(isAudioFilterSet(this, dir.filePath(s)));
             meta->loadSettings();
             addMetadata(meta);
         }
@@ -442,6 +482,7 @@ void FilterController::loadFilterSets()
                 meta->setName(QUrl::fromPercentEncoding(s.toUtf8()));
             else
                 meta->setName(s);
+            meta->setIsAudio(isAudioFilterSet(this, dir.filePath(s)));
             meta->loadSettings();
             addMetadata(meta);
         }

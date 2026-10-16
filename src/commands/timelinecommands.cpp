@@ -56,6 +56,20 @@ QVector<QUuid> getProducerUuids(Mlt::Producer *producer)
     return uuids;
 }
 
+bool isBlankRegion(Mlt::Playlist &playlist, int position, int length)
+{
+    if (position >= playlist.get_playtime())
+        return true;
+    // The last index is the count when the region extends past the end of the playlist.
+    const int first = playlist.get_clip_index_at(position);
+    const int last = playlist.get_clip_index_at(position + length - 1);
+    for (int i = first; i <= last && i < playlist.count(); i++) {
+        if (!playlist.is_blank(i))
+            return false;
+    }
+    return true;
+}
+
 int getUniqueGroupNumber(MultitrackModel &model)
 {
     QSet<int> groups;
@@ -2624,11 +2638,9 @@ void DetachAudioCommand::redo()
                 continue;
             if (track->get(kAudioTrackProperty)) {
                 Mlt::Playlist playlist(*track.data());
-                int out = videoClip.get_playtime() - 1;
-                // If the audio track is blank in the target region.
-                if (playlist.is_blank_at(m_position) && playlist.is_blank_at(m_position + out)
-                    && playlist.get_clip_index_at(m_position)
-                           == playlist.get_clip_index_at(m_position + out)) {
+                // If the audio track is blank in the target region. This also accepts an
+                // empty track, which holds a one-frame blank placeholder.
+                if (isBlankRegion(playlist, m_position, videoClip.get_playtime())) {
                     // Save the target track index.
                     m_targetTrackIndex = i;
                     break;
@@ -2698,6 +2710,115 @@ void DetachAudioCommand::undo()
                                 << MultitrackModel::AudioIndexRole
                                 << MultitrackModel::AudioLevelsRole << MultitrackModel::GroupRole);
     m_timeline.setSelection(QList<QPoint>() << QPoint(m_clipIndex, m_trackIndex));
+}
+
+// Adds a Copy Channel filter (the same one users get from the Effects list) that copies
+// fromChannel over the other front channel, so the clip plays only that source channel,
+// centered on both outputs. It goes ahead of other audio filters so that they process the
+// selected channel rather than the original stereo pair.
+static void addSingleChannelFilter(Mlt::Producer &producer, int fromChannel)
+{
+    Mlt::Filter filter(MLT.profile(), "channelcopy");
+    if (!filter.is_valid())
+        return;
+    filter.set("from", fromChannel);
+    filter.set("to", fromChannel == 0 ? 1 : 0);
+    filter.set(kShotcutFilterProperty, "audioChannelCopy");
+    filter.set_in_and_out(producer.get_in(), producer.get_out());
+
+    int insertIndex = producer.filter_count();
+    for (int i = 0; i < producer.filter_count(); i++) {
+        std::unique_ptr<Mlt::Filter> other(producer.filter(i));
+        if (Util::isUserFilter(other.get())) {
+            QmlMetadata *meta = MAIN.filterController()->metadataForService(other.get());
+            if (meta && meta->isAudio()) {
+                insertIndex = i;
+                break;
+            }
+        }
+    }
+    producer.attach(filter);
+    int lastIndex = producer.filter_count() - 1;
+    if (insertIndex < lastIndex)
+        producer.move_filter(lastIndex, insertIndex);
+}
+
+SplitStereoCommand::SplitStereoCommand(
+    TimelineDock &timeline, int trackIndex, int position, int rightTrackIndex, QUndoCommand *parent)
+    : QUndoCommand(parent)
+    , m_timeline(timeline)
+    , m_trackIndex(trackIndex)
+    , m_position(position)
+    , m_rightTrackIndex(rightTrackIndex)
+    , m_groupNumber(-1)
+    , m_undoHelper(*timeline.model())
+{
+    setText(QObject::tr("Split stereo to left/right"));
+    m_undoHelper.setText(text());
+    // No RestoreTracks hint: the left clip is replaced by a new producer rather than changed in
+    // place, and the per-clip undo keeps the uuids of untouched blanks, which the undo of an
+    // earlier Detach Audio in the same macro relies on.
+
+    auto model = m_timeline.model();
+    if (m_trackIndex < 0 || m_trackIndex >= model->trackList().size())
+        return;
+    auto info = model->getClipInfo(m_trackIndex, model->clipIndex(m_trackIndex, m_position));
+    if (info && info->producer && info->producer->is_valid() && !info->producer->is_blank()
+        && info->start == m_position) {
+        Mlt::Producer clip(MLT.profile(),
+                           "xml-string",
+                           MLT.XML(info->producer).toUtf8().constData());
+        clip.set_in_and_out(info->frame_in, info->frame_out);
+        m_xml = MLT.XML(&clip);
+        if (info->cut && info->cut->property_exists(kShotcutGroupProperty))
+            m_groupNumber = info->cut->get_int(kShotcutGroupProperty);
+    }
+}
+
+void SplitStereoCommand::redo()
+{
+    LOG_DEBUG() << "trackIndex" << m_trackIndex << "position" << m_position << "rightTrackIndex"
+                << m_rightTrackIndex;
+    auto model = m_timeline.model();
+    if (m_xml.isEmpty() || m_trackIndex == m_rightTrackIndex || m_rightTrackIndex < 0
+        || m_rightTrackIndex >= model->trackList().size())
+        return;
+    Mlt::Producer leftClip(MLT.profile(), "xml-string", m_xml.toUtf8().constData());
+    Mlt::Producer rightClip(MLT.profile(), "xml-string", m_xml.toUtf8().constData());
+    if (!leftClip.is_valid() || !rightClip.is_valid())
+        return;
+
+    // Each half gets its own producer, so the labels and filters stay independent.
+    // The label is a prefix because Properties recomputes a caption that starts with the
+    // file name.
+    QString caption = Util::producerTitle(leftClip);
+    addSingleChannelFilter(leftClip, 0);
+    leftClip.set(kShotcutCaptionProperty, QObject::tr("[L] %1").arg(caption).toUtf8().constData());
+    addSingleChannelFilter(rightClip, 1);
+    rightClip.set(kShotcutCaptionProperty, QObject::tr("[R] %1").arg(caption).toUtf8().constData());
+
+    m_undoHelper.recordBeforeState({m_trackIndex, m_rightTrackIndex});
+    model->overwrite(m_trackIndex, leftClip, m_position, false);
+    model->overwrite(m_rightTrackIndex, rightClip, m_position, false);
+    if (m_groupNumber >= 0) {
+        model->setClipGroup(m_trackIndex, m_position, m_groupNumber);
+        model->setClipGroup(m_rightTrackIndex, m_position, m_groupNumber);
+    }
+    m_undoHelper.recordAfterState();
+    m_timeline.setSelection(QList<QPoint>()
+                            << QPoint(model->clipIndex(m_trackIndex, m_position), m_trackIndex)
+                            << QPoint(model->clipIndex(m_rightTrackIndex, m_position),
+                                      m_rightTrackIndex));
+}
+
+void SplitStereoCommand::undo()
+{
+    LOG_DEBUG() << "trackIndex" << m_trackIndex << "position" << m_position << "rightTrackIndex"
+                << m_rightTrackIndex;
+    auto model = m_timeline.model();
+    m_undoHelper.undoChanges();
+    m_timeline.setSelection(QList<QPoint>()
+                            << QPoint(model->clipIndex(m_trackIndex, m_position), m_trackIndex));
 }
 
 ReplaceCommand::ReplaceCommand(
