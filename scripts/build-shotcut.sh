@@ -122,6 +122,9 @@ SHOTCUT_LOCAL_SOURCE=
 SUBDIRS_EXCLUDE=
 # Extra arguments appended to the MLT cmake command line (later -D wins).
 MLT_ADDITIONAL_OPTIONS=
+# Extra C and C++ compiler flags for MLT, for example "-DMELT_NOSDL" to build
+# melt without SDL (on macOS melt.c otherwise always includes SDL.h).
+MLT_ADDITIONAL_CFLAGS=
 # macOS: architectures to build ("arm64;x86_64" = universal, or a single
 # architecture that matches the build machine, e.g. "arm64").
 MACOS_ARCHITECTURES="arm64;x86_64"
@@ -922,6 +925,7 @@ function set_globals {
   # The spatialaudio module requires libspatialaudio.
   [ "$ENABLE_LIBSPATIALAUDIO" != "1" ] && CONFIG[1]="${CONFIG[1]} -DMOD_SPATIALAUDIO=OFF"
   [ -n "$MLT_ADDITIONAL_OPTIONS" ] && CONFIG[1]="${CONFIG[1]} $MLT_ADDITIONAL_OPTIONS"
+  [ -n "$MLT_ADDITIONAL_CFLAGS" ] && CFLAGS_[1]="${CFLAGS_[1]} $MLT_ADDITIONAL_CFLAGS"
   CXXFLAGS_[1]="${CFLAGS_[1]} -std=c++11"
   LDFLAGS_[1]="${LDFLAGS_[1]} -L$FINAL_INSTALL_DIR/lib $ASAN_LDFLAGS $LDFLAGS"
   BUILD[1]="ninja -C build -j $MAKEJ"
