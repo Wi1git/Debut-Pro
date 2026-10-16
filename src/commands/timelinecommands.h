@@ -54,6 +54,9 @@ enum {
     UndoIdChangeDuckEnabled,
 };
 
+// Whether the playlist has only blank space, or nothing at all, for length frames from position.
+bool isBlankRegion(Mlt::Playlist &playlist, int position, int length);
+
 struct ClipPosition
 {
     ClipPosition(int track, int clip)
@@ -931,6 +934,8 @@ public:
                        QUndoCommand *parent = 0);
     void redo();
     void undo();
+    // The audio track that received the detached audio, or -1 if not (yet) done.
+    int targetTrackIndex() const { return m_targetTrackIndex; }
 
 private:
     TimelineDock &m_timeline;
@@ -942,6 +947,30 @@ private:
     UndoHelper m_undoHelper;
     bool m_trackAdded;
     QUuid m_uuid;
+};
+
+// Turns the audio clip at (trackIndex, position) into a left-only clip and puts a right-only
+// copy at the same position on rightTrackIndex, which must be free there. Each half gets a
+// Copy Channel filter so that it plays one source channel on both outputs (dual mono).
+class SplitStereoCommand : public QUndoCommand
+{
+public:
+    SplitStereoCommand(TimelineDock &timeline,
+                       int trackIndex,
+                       int position,
+                       int rightTrackIndex,
+                       QUndoCommand *parent = nullptr);
+    void redo();
+    void undo();
+
+private:
+    TimelineDock &m_timeline;
+    int m_trackIndex;
+    int m_position;
+    int m_rightTrackIndex;
+    QString m_xml;
+    int m_groupNumber;
+    UndoHelper m_undoHelper;
 };
 
 class ReplaceCommand : public QUndoCommand

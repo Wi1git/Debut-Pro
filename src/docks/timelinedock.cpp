@@ -293,6 +293,7 @@ TimelineDock::TimelineDock(QWidget *parent)
     editMenu->addAction(Actions["timelineFreezeFrameAction"]);
     editMenu->addAction(Actions["timelineAddTransitionAction"]);
     editMenu->addAction(Actions["timelineAddAudioCrossfadeAction"]);
+    editMenu->addAction(Actions["timelineSplitStereoAction"]);
     m_mainMenu->addMenu(editMenu);
     QMenu *toolsMenu = new QMenu(tr("Tools"), this);
     toolsMenu->addAction(Actions["timelineSelectionToolAction"]);
@@ -326,6 +327,7 @@ TimelineDock::TimelineDock(QWidget *parent)
     m_clipMenu->addAction(Actions["timelineNudgeBackwardAction"]);
     m_clipMenu->addAction(Actions["timelineMergeWithNextAction"]);
     m_clipMenu->addAction(Actions["timelineDetachAudioAction"]);
+    m_clipMenu->addAction(Actions["timelineSplitStereoAction"]);
     m_clipMenu->addAction(Actions["timelineFreezeFrameAction"]);
     m_clipMenu->addAction(Actions["timelineAlignToReferenceAction"]);
     m_clipMenu->addAction(Actions["timelineApplyCopiedFiltersAction"]);
@@ -1648,6 +1650,23 @@ void TimelineDock::setupActions()
         action->setEnabled(enabled);
     });
     Actions.add("timelineDetachAudioAction", action);
+
+    action = new QAction(tr("Split Stereo to Left/Right"), this);
+    action->setToolTip(tr("Make a left-only and a right-only audio clip from each selected "
+                          "stereo clip"));
+    action->setEnabled(false);
+    connect(action, &QAction::triggered, this, &TimelineDock::splitStereo);
+    connect(this, &TimelineDock::selectionChanged, action, [=]() {
+        bool enabled = false;
+        for (const auto &clip : selection()) {
+            if (canSplitStereo(clip.y(), clip.x())) {
+                enabled = true;
+                break;
+            }
+        }
+        action->setEnabled(enabled);
+    });
+    Actions.add("timelineSplitStereoAction", action);
 
     action = new QAction(tr("Freeze Frame"), this);
     action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_H));
@@ -3510,6 +3529,13 @@ void TimelineDock::detachAudio(int trackIndex, int clipIndex)
     if (!m_model.trackList().count())
         return;
     Q_ASSERT(trackIndex >= 0 && clipIndex >= 0);
+    auto command = newDetachAudioCommand(trackIndex, clipIndex);
+    if (command)
+        MAIN.undoStack()->push(command);
+}
+
+Timeline::DetachAudioCommand *TimelineDock::newDetachAudioCommand(int trackIndex, int clipIndex)
+{
     auto info = m_model.getClipInfo(trackIndex, clipIndex);
     if (info && info->producer && info->producer->is_valid() && !info->producer->is_blank()
         && info->producer->get("audio_index") && info->producer->get_int("audio_index") >= 0) {
@@ -3520,12 +3546,119 @@ void TimelineDock::detachAudio(int trackIndex, int clipIndex)
                            "xml-string",
                            MLT.XML(info->producer).toUtf8().constData());
         clip.set_in_and_out(info->frame_in, info->frame_out);
-        MAIN.undoStack()->push(new Timeline::DetachAudioCommand(*this,
-                                                                trackIndex,
-                                                                clipIndex,
-                                                                info->start,
-                                                                MLT.XML(&clip)));
+        return new Timeline::DetachAudioCommand(*this,
+                                                trackIndex,
+                                                clipIndex,
+                                                info->start,
+                                                MLT.XML(&clip));
     }
+    return nullptr;
+}
+
+bool TimelineDock::canSplitStereo(int trackIndex, int clipIndex)
+{
+    if (trackIndex < 0 || clipIndex < 0 || trackIndex >= m_model.trackList().size()
+        || isTrackLocked(trackIndex) || isBlank(trackIndex, clipIndex)
+        || isTransition(trackIndex, clipIndex))
+        return false;
+    auto info = m_model.getClipInfo(trackIndex, clipIndex);
+    if (!info || !info->producer || !info->producer->is_valid() || info->producer->is_blank())
+        return false;
+    // The clip must have audio.
+    const QString audioIndex = QString::fromLatin1(info->producer->get("audio_index"));
+    if (audioIndex == "all")
+        return true; // Several audio streams are mixed, so the channel count is unknown.
+    bool ok = false;
+    const int index = audioIndex.toInt(&ok);
+    if (!ok || index < 0)
+        return false;
+    // Require at least two channels when the file reports its channel count.
+    const QByteArray key = QStringLiteral("meta.media.%1.codec.channels").arg(index).toLatin1();
+    if (info->producer->property_exists(key.constData()))
+        return info->producer->get_int(key.constData()) >= 2;
+    return true;
+}
+
+// Whether trackIndex is an unlocked audio track with only blank space for length frames
+// starting at position.
+static bool isAudioTrackFree(MultitrackModel &model, int trackIndex, int position, int length)
+{
+    if (trackIndex < 0 || trackIndex >= model.trackList().size()
+        || model.trackList().at(trackIndex).type != AudioTrackType)
+        return false;
+    QScopedPointer<Mlt::Producer> track(
+        model.tractor()->track(model.trackList().at(trackIndex).mlt_index));
+    if (!track || !track->is_valid() || track->get_int(kTrackLockProperty))
+        return false;
+    Mlt::Playlist playlist(*track);
+    return Timeline::isBlankRegion(playlist, position, length);
+}
+
+/*!
+    \qmlmethod void TimelineDock::splitStereo()
+    \brief Splits each selected stereo clip into a left-only and a right-only audio clip.
+
+    A clip on a video track first has its audio detached, as with Detach Audio. The audio clip
+    then plays only its left channel and a copy on the audio track below plays only the right
+    channel, each centered on both outputs. A new audio track is inserted below when that track
+    is not free. All of it is one undo step.
+*/
+
+void TimelineDock::splitStereo()
+{
+    if (!isMultitrackValid())
+        return;
+    // Remember clips by start position because detaching audio and inserting tracks change
+    // the indexes as this proceeds.
+    QList<QPoint> clips; // x is the position, y is the track index
+    for (const auto &clip : selection()) {
+        if (canSplitStereo(clip.y(), clip.x()))
+            clips << QPoint(m_model.clipStart(clip.y(), clip.x()), clip.y());
+    }
+    if (clips.isEmpty())
+        return;
+    // Work from the bottom up so that a track inserted below one clip never moves a clip that
+    // is still waiting its turn.
+    std::sort(clips.begin(), clips.end(), [](const QPoint &a, const QPoint &b) {
+        return a.y() != b.y() ? a.y() > b.y() : a.x() > b.x();
+    });
+
+    QVector<QUuid> newSelection;
+    MAIN.undoStack()->beginMacro(tr("Split stereo to left/right"));
+    for (const auto &clip : std::as_const(clips)) {
+        int trackIndex = clip.y();
+        const int position = clip.x();
+        if (m_model.trackList().at(trackIndex).type != AudioTrackType) {
+            auto detach = newDetachAudioCommand(trackIndex, m_model.clipIndex(trackIndex, position));
+            if (!detach)
+                continue;
+            MAIN.undoStack()->push(detach);
+            trackIndex = detach->targetTrackIndex();
+            if (trackIndex < 0)
+                continue;
+        }
+        auto info = m_model.getClipInfo(trackIndex, m_model.clipIndex(trackIndex, position));
+        if (!info || info->start != position)
+            continue;
+        const int rightTrackIndex = trackIndex + 1;
+        if (!isAudioTrackFree(m_model, rightTrackIndex, position, info->frame_count)) {
+            if (rightTrackIndex < m_model.trackList().size()) {
+                MAIN.undoStack()->push(
+                    new Timeline::InsertTrackCommand(m_model, rightTrackIndex, AudioTrackType));
+            } else {
+                MAIN.undoStack()->push(new Timeline::AddTrackCommand(m_model, false));
+            }
+        }
+        MAIN.undoStack()->push(
+            new Timeline::SplitStereoCommand(*this, trackIndex, position, rightTrackIndex));
+        for (const int i : {trackIndex, rightTrackIndex}) {
+            auto result = m_model.getClipInfo(i, m_model.clipIndex(i, position));
+            if (result && result->producer && result->producer->is_valid())
+                newSelection << MLT.ensureHasUuid(*result->producer);
+        }
+    }
+    MAIN.undoStack()->endMacro();
+    setSelection(uuidsToSelection(newSelection));
 }
 
 /*!

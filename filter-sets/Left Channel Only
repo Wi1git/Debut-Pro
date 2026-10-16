@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mlt LC_NUMERIC="C" version="7.36.0" root="" parent="producer0" in="00:00:00.000" out="00:09:59.960">
+  <producer id="producer0" in="00:00:00.000" out="00:09:59.960">
+    <property name="length">00:10:00.000</property>
+    <property name="eof">pause</property>
+    <property name="resource">black</property>
+    <property name="aspect_ratio">1</property>
+    <property name="mlt_service">color</property>
+    <property name="shotcut:filtersClipboard">1</property>
+    <filter id="filter0" out="00:09:59.960">
+      <property name="from">0</property>
+      <property name="to">1</property>
+      <property name="mlt_service">channelcopy</property>
+      <property name="shotcut:filter">audioChannelCopy</property>
+    </filter>
+  </producer>
+</mlt>

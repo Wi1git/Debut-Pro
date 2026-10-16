@@ -34,6 +34,7 @@
 namespace Timeline {
 class UpdateCommand;
 class TrimCommand;
+class DetachAudioCommand;
 } // namespace Timeline
 class UndoHelper;
 class QMenu;
@@ -199,6 +200,7 @@ public slots:
     void onRowsMoved(
         const QModelIndex &parent, int start, int end, const QModelIndex &destination, int row);
     void detachAudio(int trackIndex, int clipIndex);
+    void splitStereo();
     void selectAll();
     void selectAllOnCurrentTrack();
     void onProducerModified();
@@ -233,6 +235,8 @@ private:
     bool nothingIsSelected();
     bool isTransition(int trackIndex, int clipIndex);
     bool isEmptyTrack(Mlt::Playlist &playlist);
+    Timeline::DetachAudioCommand *newDetachAudioCommand(int trackIndex, int clipIndex);
+    bool canSplitStereo(int trackIndex, int clipIndex);
     void emitNonSeekableWarning();
     void emitClipExtendStatus(int cappedOut, int requestedOut, int currentOut);
     int limitClipOut(Mlt::Playlist &playlist, int clipIndex, int in, int frameCount, int out);
