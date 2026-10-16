@@ -45,6 +45,7 @@ BIGSH0T_HEAD=0
 BIGSH0T_REVISION="710e734512b8975722f0c41f793f28c51a3d2b88"
 DAV1D_HEAD=0
 DAV1D_REVISION="1.5.1"
+ENABLE_AOM=1
 AOM_HEAD=0
 AOM_REVISION="v3.13.1"
 ENABLE_VMAF=1
@@ -73,6 +74,14 @@ ENABLE_RNNOISE=1
 RNNOISE_HEAD=1
 RNNOISE_REVISION=
 NV_CODEC_REVISION="sdk/12.0"
+# Build Shotcut from this local source tree (copied into $SOURCE_DIR/shotcut)
+# instead of cloning the upstream repository.
+SHOTCUT_LOCAL_SOURCE=
+# Space-separated list of subprojects to leave out of the computed SUBDIRS,
+# for example "shotcut" to build only the dependencies.
+SUBDIRS_EXCLUDE=
+# Extra arguments appended to the MLT cmake command line (later -D wins).
+MLT_ADDITIONAL_OPTIONS=
 
 PYTHON_VERSION=$(python3 --version | awk '{split($2, parts, "."); print parts[1] "." parts[2]}')
 PYTHON_VERSION_DLL=$(python3 --version | awk '{split($2, parts, "."); print parts[1]parts[2]}')
@@ -376,7 +385,8 @@ function set_globals {
   # Note, the function to_key depends on this
   if [ -z "$SUBDIRS" ]; then
     [ "$TARGET_ARCH" = "ucrt64" ] && SUBDIRS="AMF nv-codec-headers"
-    SUBDIRS="$SUBDIRS aom dav1d FFmpeg"
+    [ "$ENABLE_AOM" = "1" ] && SUBDIRS="$SUBDIRS aom"
+    SUBDIRS="$SUBDIRS dav1d FFmpeg"
 
     if test "$ENABLE_MOVIT" = 1 && test "$MOVIT_HEAD" = 1 -o "$MOVIT_REVISION" != ""; then
         SUBDIRS="$SUBDIRS movit"
@@ -413,6 +423,10 @@ function set_globals {
     fi
     SUBDIRS="$SUBDIRS mlt shotcut"
   fi
+  for EXCLUDE in $SUBDIRS_EXCLUDE; do
+    SUBDIRS=" $SUBDIRS "
+    SUBDIRS="${SUBDIRS// $EXCLUDE / }"
+  done
 
   if [ "$DEBUG_BUILD" = "1" ]; then
     CONFIGURE_DEBUG_FLAG="--enable-debug"
@@ -578,7 +592,10 @@ function set_globals {
   #####
   # ffmpeg
   CONFIG[0]="./configure --prefix=$FINAL_INSTALL_DIR --disable-static --disable-doc --enable-gpl --enable-version3 --enable-shared --enable-runtime-cpudetect $CONFIGURE_DEBUG_FLAG"
-  CONFIG[0]="${CONFIG[0]} --enable-libtheora --enable-libvorbis --enable-libmp3lame --enable-libx264 --enable-libx265 --enable-libvpx --enable-libopus --enable-libvpl --enable-libdav1d --enable-libaom --disable-decoder=libaom_av1 --enable-libsvtav1 --enable-libwebp --enable-libzimg --disable-vulkan --disable-vaapi"
+  CONFIG[0]="${CONFIG[0]} --enable-libtheora --enable-libvorbis --enable-libmp3lame --enable-libx264 --enable-libx265 --enable-libvpx --enable-libopus --enable-libvpl --enable-libdav1d --enable-libsvtav1 --enable-libwebp --enable-libzimg --disable-vulkan --disable-vaapi"
+  if [ "$ENABLE_AOM" = "1" ]; then
+    CONFIG[0]="${CONFIG[0]} --enable-libaom --disable-decoder=libaom_av1"
+  fi
   [ "$TARGET_ARCH" = "clangarm64" ] && CONFIG[0]="${CONFIG[0]} --cc=clang --cxx=clang++ --arch=aarch64"
   # Add optional parameters
   if [ "$ENABLE_VMAF" = "1" ]; then
@@ -596,6 +613,9 @@ function set_globals {
   else
     CONFIG[1]="${CONFIG[1]} -DCMAKE_BUILD_TYPE=Release"
   fi
+  # The spatialaudio module requires libspatialaudio.
+  [ "$ENABLE_LIBSPATIALAUDIO" != "1" ] && CONFIG[1]="${CONFIG[1]} -DMOD_SPATIALAUDIO=OFF"
+  [ -n "$MLT_ADDITIONAL_OPTIONS" ] && CONFIG[1]="${CONFIG[1]} $MLT_ADDITIONAL_OPTIONS"
   CFLAGS_[1]="-I$FINAL_INSTALL_DIR/include $ASAN_CFLAGS $CFLAGS"
   CXXFLAGS_[1]="${CFLAGS_[1]} -D_XOPEN_SOURCE=700"
   LDFLAGS_[1]="-L$FINAL_INSTALL_DIR/lib $ASAN_LDFLAGS $LDFLAGS"
@@ -893,6 +913,24 @@ function clean_dirs {
 }
 
 #################################################################
+# get_local_shotcut
+# Copies the local Shotcut source tree SHOTCUT_LOCAL_SOURCE to ./shotcut
+# instead of cloning the upstream repository. A copy keeps the in-source
+# build from modifying the original tree.
+# Assumes cwd is $SOURCE_DIR
+function get_local_shotcut {
+  local src
+  src=$(cd "$SHOTCUT_LOCAL_SOURCE" && pwd) || die "Unable to change to directory $SHOTCUT_LOCAL_SOURCE"
+  case "$(pwd)/" in
+    "$src"/*) die "SOURCE_DIR ($(pwd)) must not be inside SHOTCUT_LOCAL_SOURCE ($src)" ;;
+  esac
+  feedback_status "Copying local Shotcut source from $src"
+  cmd rm -rf shotcut || die "Unable to remove old directory shotcut"
+  cmd mkdir shotcut || die "Unable to create directory shotcut"
+  cmd cp -a "$src"/. shotcut/ || die "Unable to copy Shotcut source from $src"
+}
+
+#################################################################
 # get_subproject
 # $1 The sourcedir to get sources for
 # Get the sources for a single project
@@ -911,8 +949,10 @@ function get_subproject {
 
   # Note that svn can check out to current directory, whereas git will not. Sigh.
   if test "git" = "$REPOTYPE" ; then
+      if test "shotcut" = "$1" -a -n "$SHOTCUT_LOCAL_SOURCE" ; then
+          get_local_shotcut
       # If the dir is there, check if it is a git repo
-      if test -d "$1" ; then
+      elif test -d "$1" ; then
           # Change to it
           cmd cd $1 || die "Unable to change to directory $1"
           debug "About to look for git repo"
@@ -947,8 +987,18 @@ function get_subproject {
           [ "$SDK" = "1" -a "shotcut" != "$1" -a "mlt" != "$1" ] && cmd rm -rf .git
       fi
 
+      # Apply FFmpeg patch from the local Shotcut source right after getting FFmpeg
+      if test "FFmpeg" = "$1" -a -n "$SHOTCUT_LOCAL_SOURCE" ; then
+           PATCH_FILE="$SHOTCUT_LOCAL_SOURCE/scripts/ffmpeg9-hwcontext_d3d11va.patch"
+           if test -f "$PATCH_FILE" ; then
+               feedback_status "Applying FFmpeg patch"
+               cmd cd "$SOURCE_DIR/FFmpeg" || die "Unable to change to directory $SOURCE_DIR/FFmpeg"
+               cmd patch -p1 -i "$PATCH_FILE" || die "Unable to apply patch $PATCH_FILE for $1"
+               feedback_status "Done applying patch for $1"
+           fi
+      fi
       # Apply FFmpeg patch from the shotcut subproject
-      if test "shotcut" = "$1" ; then
+      if test "shotcut" = "$1" -a -z "$SHOTCUT_LOCAL_SOURCE" ; then
            PATCH_FILE="$SOURCE_DIR/shotcut/scripts/ffmpeg9-hwcontext_d3d11va.patch"
            if test -f "$PATCH_FILE" ; then
                feedback_status "Applying FFmpeg patch"
@@ -1228,27 +1278,29 @@ function deploy
 
   log Reorganizing installed files
   cmd mv bin/*.dll .
-  cmd mv lib/libaom.dll .
+  [ "$ENABLE_AOM" = "1" ] && cmd mv lib/libaom.dll .
   cmd mv lib/libCuteLogger.dll .
   if [ "$SDK" = "1" ]; then
     cmd mv bin/*.exe .
     # OpenCV installs binaries to a weird place
-    cmd mv {x64,x86}/mingw/bin/*.dll .
+    [ "$ENABLE_OPENCV" = "1" ] && cmd mv {x64,x86}/mingw/bin/*.dll .
   else
     cmd mv bin/ffmpeg.exe .
     cmd mv bin/ffplay.exe .
     cmd mv bin/ffprobe.exe .
-    cmd mv bin/glaxnimate.exe .
-    cmd mv bin/whisper-cli.exe .
+    [ "$ENABLE_GLAXNIMATE" = "1" ] && cmd mv bin/glaxnimate.exe .
+    [ "$ENABLE_WHISPERCPP" = "1" ] && cmd mv bin/whisper-cli.exe .
     cmd rm -rf bin include etc man manifest src *.txt
     cmd rm lib/*
     cmd rm -rf lib/cmake lib/pkgconfig lib/gdk-pixbuf-2.0 lib/glib-2.0 lib/gtk-2.0
     cmd rm -rf share/doc share/man share/ffmpeg/examples share/aclocal share/glib-2.0 share/gtk-2.0 share/gtk-doc share/themes share/locale
-    # OpenCV installs binaries to a weird place
-    cmd mv {x64,x86}/mingw/bin/*.dll .
-    cmd rm -rf {x64,x86}
-    cmd rm OpenCVConfig*
-    cmd rm setup_vars_opencv4.cmd
+    if [ "$ENABLE_OPENCV" = "1" ]; then
+      # OpenCV installs binaries to a weird place
+      cmd mv {x64,x86}/mingw/bin/*.dll .
+      cmd rm -rf {x64,x86}
+      cmd rm OpenCVConfig*
+      cmd rm setup_vars_opencv4.cmd
+    fi
   fi
   cmd mv COPYING COPYING.txt
 
