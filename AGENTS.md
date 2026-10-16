@@ -1,3 +1,43 @@
+# Debut Pro (read this first)
+
+This repository is **Debut Pro**, a personal fork of Shotcut reshaped to look and
+behave like Adobe Premiere Pro (layout and behavior only: never copy Adobe code,
+names, icons or other assets). Owner: GitHub user Wi1git, not a developer, so keep
+explanations plain. Targets: **macOS on Apple Silicon (M1 Pro)** and **Windows x64
+(AMD CPU, NVIDIA or AMD GPU)**. Linux is only used for development builds.
+
+Ground rules for changes:
+
+- Keep the app offline: no update checks, downloads, telemetry, or listening sockets.
+  Online Shotcut features are compiled out with the `DEBUT_SLIM` CMake option
+  (default ON) and `SHOTCUT_NOUPGRADE`. Don't add network code.
+- Keep project files (.mlt) compatible with Shotcut: don't rename `shotcut:*` MLT
+  properties or the "Shotcut version" XML title.
+- Keep internal names (`Shotcut.app`, `shotcut.exe`, `src/` class names) so upstream
+  merges stay easy; the CI packaging renames the shipped app to "Debut Pro".
+- Keep the GPL credits to Shotcut/Meltytech (About box, README, Info.plist).
+
+Where things are:
+
+| Area | Files |
+|---|---|
+| Theme (dark, blue accent) | `MainWindow::changeTheme` in `src/mainwindow.cpp`, `src/resources/qtquickcontrols2-dark.conf`, timeline colors in `src/qml/views/timeline/` |
+| Default workspace | `MainWindow::applyDebutEditingLayout()` |
+| Premiere shortcuts, Razor/Selection tools, Ctrl+D transitions | `src/docks/timelinedock.cpp`, `src/qml/views/timeline/timeline.qml`, `src/player.cpp`, `src/mainwindow.cpp`; user list in `docs/SHORTCUTS.md` |
+| Split Stereo to Left/Right | `TimelineDock::splitStereo`, `Timeline::SplitStereoCommand` in `src/commands/timelinecommands.cpp`, presets in `filter-sets/` |
+| Offline slim-down | `DEBUT_SLIM` in `CMakeLists.txt`, `src/CMakeLists.txt` and `#ifndef DEBUT_SLIM` guards |
+| Hardware-encoder auto-detect | `EncodeDock` (`src/docks/encodedock.cpp`) |
+| CI (Mac + Windows) | `.github/workflows/build-macos.yml`, `build-windows.yml`, `scripts/ci/`, notes and first-run watch list in `docs/BUILDING-DEBUT-PRO.md` |
+
+Status as of 2026-10-15: all features above build and were tested on Linux
+(Qt 6.10.2, MLT 7.43). **The macOS and Windows workflows had never run yet** when
+this was written. The first job of a new session is usually to push, watch both
+workflows, and fix failures using the ranked watch list in
+`docs/BUILDING-DEBUT-PRO.md`. Commit small fixes and re-run until both artifacts
+(`DebutPro-macos-arm64.dmg`, `DebutPro-windows-x64.zip`) are produced.
+
+---
+
 # Shotcut — Workspace Instructions
 
 Shotcut is a free, open-source, cross-platform video editor built on Qt 6 and the [MLT multimedia framework](https://www.mltframework.org/).

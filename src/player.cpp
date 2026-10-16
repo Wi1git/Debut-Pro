@@ -1360,12 +1360,9 @@ void Player::showIdleStatus()
                        -1,
                        nullptr,
                        QPalette::AlternateBase);
-    } else if (Settings.playerPreviewScale() > 0) {
-        setStatusLabel(tr("Preview scaling is ON at %1p").arg(Settings.playerPreviewScale()),
-                       -1,
-                       nullptr,
-                       QPalette::AlternateBase);
     } else {
+        // Debut Pro: preview scaling (720p) is the normal playback mode, like Premiere's
+        // playback resolution, so it doesn't get a permanent banner.
         setStatusLabel("", -1, nullptr);
     }
 }

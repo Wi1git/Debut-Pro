@@ -57,3 +57,4 @@ docs/qml-api/
 shotcut.code-workspace
 .qtcreator/
 build/
+build-asan/

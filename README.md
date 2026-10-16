@@ -1,7 +1,50 @@
-[![build-shotcut-linux](https://github.com/mltframework/shotcut/workflows/build-shotcut-linux/badge.svg)](https://github.com/mltframework/shotcut/actions?query=workflow%3Abuild-shotcut-linux+is%3Acompleted+branch%3Amaster)
-[![build-shotcut-macos](https://github.com/mltframework/shotcut/workflows/build-shotcut-macos/badge.svg)](https://github.com/mltframework/shotcut/actions?query=workflow%3Abuild-shotcut-macos+is%3Acompleted+branch%3Amaster)
-[![build-shotcut-windows](https://github.com/mltframework/shotcut/workflows/build-shotcut-windows/badge.svg)](https://github.com/mltframework/shotcut/actions?query=workflow%3Abuild-shotcut-windows+is%3Acompleted+branch%3Amaster)
+# Debut Pro
 
+A personal, lightweight video editor with a Premiere Pro-style layout and shortcuts.
+Debut Pro is a fork of [Shotcut](https://www.shotcut.org/) (GPLv3) by Meltytech, LLC
+and contributors; all of Shotcut's editing features come from their work.
+
+<img src="icons/shotcut-logo-320x320.png" width="96" alt="Debut Pro icon" />
+
+## What's different from Shotcut
+
+- **Look:** charcoal dark theme with a blue accent and playhead; Premiere-style
+  workspace (Effect Controls and Project panels on the left, Program monitor top
+  right, Timeline and audio meters below); workspaces named Assembly, Editing,
+  Effects, Color, Audio.
+- **Keys and tools:** Premiere-style default shortcuts (Ctrl/Cmd+K add edit,
+  Q/W ripple trim, Shift+Delete ripple delete, Ctrl/Cmd+D cross dissolve,
+  V selection tool, C razor tool, and more). See `docs/SHORTCUTS.md`.
+- **Audio:** *Split Stereo to Left/Right* (like Premiere's breakout to mono) in the
+  clip right-click menu, plus *Left Channel Only* / *Right Channel Only* presets.
+- **Offline by design:** no update checks, no model or Docker downloads, no HTML
+  renderer; the app opens no network ports. Only things you do on purpose (opening a
+  stream URL, clicking a Help link) touch the network.
+- **Faster defaults:** hardware decoding on, hardware encoder auto-detected the first
+  time you open Export (VideoToolbox on Mac, NVENC or AMF on Windows), 720p preview
+  scaling for smooth playback (exports stay full resolution).
+- **Separate settings:** Debut Pro keeps its own settings and can sit next to Shotcut.
+  Project files (.mlt) stay compatible with Shotcut.
+
+## Downloads
+
+Builds come from GitHub Actions (Actions tab → latest run → Artifacts):
+
+- `DebutPro-macos-arm64.dmg`: Apple Silicon, macOS 15 or newer
+- `DebutPro-windows-x64.zip`: portable folder, no installer
+
+They are not signed by Apple or Microsoft. On the first launch:
+
+- **Mac:** open the app once, then System Settings → Privacy & Security → *Open Anyway*.
+- **Windows:** in the SmartScreen prompt choose *More info* → *Run anyway*.
+
+Details: `docs/BUILDING-DEBUT-PRO.md`.
+
+## License
+
+GPLv3, same as Shotcut. See `COPYING`.
+
+---
 
 # Shotcut - a free, open source, cross-platform **video editor**
 
