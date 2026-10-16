@@ -904,7 +904,9 @@ function set_globals {
 
   #####
   # mlt
-  CONFIG[1]="cmake -GNinja -B build -DCMAKE_INSTALL_PREFIX=$FINAL_INSTALL_DIR -DCMAKE_PREFIX_PATH=$QTDIR -DMOD_GDK=OFF -DMOD_GLAXNIMATE_QT6=ON -DMOD_PLACEBO=OFF -DMOD_SPATIALAUDIO=ON"
+  # Our prefix comes first: Qt's own lib folder can contain an older FFmpeg
+  # (the Qt Multimedia FFmpeg backend), which CMake would otherwise link.
+  CONFIG[1]="cmake -GNinja -B build -DCMAKE_INSTALL_PREFIX=$FINAL_INSTALL_DIR -DCMAKE_PREFIX_PATH='$FINAL_INSTALL_DIR;$QTDIR' -DMOD_GDK=OFF -DMOD_GLAXNIMATE_QT6=ON -DMOD_PLACEBO=OFF -DMOD_SPATIALAUDIO=ON"
   # Remember, if adding more of these, to update the post-configure check.
   [ "$ENABLE_OPENCV" = "1" ] && CONFIG[1]="${CONFIG[1]} -DMOD_OPENCV=ON"
   [ "$MLT_DISABLE_SOX" = "1" ] && CONFIG[1]="${CONFIG[1]} -DMOD_SOX=OFF"
