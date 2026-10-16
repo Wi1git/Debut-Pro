@@ -1536,8 +1536,10 @@ void TimelineDock::setupActions()
             }
         }
         if (mltProducers->get_data("glaxnimate")) {
+#ifndef DEBUT_SLIM
             menu->addAction(tr("Drawing/Animation"), this, SLOT(addGenerator()))
                 ->setObjectName("glaxnimate");
+#endif
             menu->addAction(tr("Elements"), this, []() { MAIN.onElementsDockTriggered(); });
         }
         if (mltProducers->get_data("noise")) {

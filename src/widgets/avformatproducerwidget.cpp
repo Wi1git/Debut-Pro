@@ -26,7 +26,9 @@
 #include "jobs/bitrateviewerjob.h"
 #include "jobs/ffmpegjob.h"
 #include "jobs/ffprobejob.h"
+#ifndef DEBUT_SLIM
 #include "jobs/gopro2gpxjob.h"
+#endif
 #include "jobs/meltjob.h"
 #include "jobs/postjobaction.h"
 #include "mainwindow.h"
@@ -787,9 +789,11 @@ void AvformatProducerWidget::on_menuButton_clicked()
         menu.addAction(ui->actionSetEquirectangular);
     }
     menu.addAction(ui->actionFFmpegVideoQuality);
+#ifndef DEBUT_SLIM
     if (ui->actionExportGPX->isEnabled()) {
         menu.addAction(ui->actionExportGPX);
     }
+#endif
     menu.addAction(ui->actionBitrateViewer);
     menu.exec(ui->menuButton->mapToGlobal(QPoint(0, 0)));
 }
@@ -1607,6 +1611,7 @@ void AvformatProducerWidget::on_rotationComboBox_activated(int index)
     }
 }
 
+#ifndef DEBUT_SLIM
 void AvformatProducerWidget::on_actionExportGPX_triggered()
 {
     QString resource = Util::GetFilenameFromProducer(producer());
@@ -1615,6 +1620,7 @@ void AvformatProducerWidget::on_actionExportGPX_triggered()
     args << resource;
     JOBS.add(new GoPro2GpxJob(resource, args));
 }
+#endif
 
 void AvformatProducerWidget::on_lutButton_clicked()
 {

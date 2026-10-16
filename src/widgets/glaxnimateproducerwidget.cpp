@@ -237,7 +237,10 @@ void GlaxnimateProducerWidget::setProducer(Mlt::Producer *p)
     ui->notesLabel->setVisible(true);
     ui->notesTextEdit->setVisible(true);
     ui->notesTextEdit->setPlainText(QString::fromUtf8(p->get(kCommentProperty)));
+#ifndef DEBUT_SLIM
+    // Debut Pro does not ship the external Glaxnimate editor.
     ui->editButton->setVisible(true);
+#endif
     ui->reloadButton->setVisible(true);
 
     auto filename = QString::fromUtf8(p->get("resource"));
@@ -619,6 +622,15 @@ void GlaxnimateIpcServer::launch(const Mlt::Producer &producer,
                                  QString filename,
                                  bool hideCurrentTrack)
 {
+#ifdef DEBUT_SLIM
+    // Debut Pro does not ship the external Glaxnimate editor, so never start it
+    // or open its IPC server.
+    Q_UNUSED(producer)
+    Q_UNUSED(filename)
+    Q_UNUSED(hideCurrentTrack)
+    LOG_WARNING() << "launching Glaxnimate is not available in this build";
+    return;
+#endif
     parent.reset(new ParentResources);
 
     if (Settings.playerGPU()) {

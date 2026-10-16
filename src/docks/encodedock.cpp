@@ -35,10 +35,12 @@
 #include "util.h"
 
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
 #include <QTimer>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QtMath>
 #include <QtWidgets>
 #include <QtXml>
@@ -181,11 +183,18 @@ EncodeDock::EncodeDock(QWidget *parent)
 
     on_resetButton_clicked();
 
+    // The first time the Export panel is shown, detect hardware encoders without blocking.
+    connect(this, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+        if (visible && !m_hwAutoDetectStarted)
+            QTimer::singleShot(1000, this, &EncodeDock::autoDetectHardwareEncoders);
+    });
+
     LOG_DEBUG() << "end";
 }
 
 EncodeDock::~EncodeDock()
 {
+    *m_hwAutoDetectCancel = true;
     if (m_immediateJob)
         m_immediateJob->stop();
     delete ui;
@@ -2783,63 +2792,73 @@ void EncodeDock::on_parallelCheckbox_clicked(bool checked)
     Settings.setEncodeParallelProcessing(checked);
 }
 
+// Try to encode one small frame with the given hardware encoder using ffmpeg.
+// With processEvents false this runs no event loop, so it may run on a worker thread.
+static bool probeHardwareEncoder(const QString &ffmpegPath, const QString &codec, bool processEvents)
+{
+    LOG_INFO() << "checking for" << codec;
+    QProcess proc;
+    QStringList args;
+    args << "-hide_banner"
+         << "-f"
+         << "lavfi"
+         << "-i"
+         << "color=s=640x360"
+         << "-frames"
+         << "1"
+         << "-an";
+    if (codec.endsWith("_vaapi"))
+        args << "-init_hw_device"
+             << "vaapi=vaapi0:"
+             << "-filter_hw_device"
+             << "vaapi0"
+             << "-vf"
+             << "format=nv12,hwupload";
+    else if (codec == "hevc_qsv")
+        args << "-load_plugin"
+             << "hevc_hw";
+    else if (codec.endsWith("_videotoolbox"))
+        args << "-pix_fmt"
+             << "nv12";
+    else if (codec.endsWith("_mf"))
+        args << "-pix_fmt"
+             << "nv12"
+             << "-hw_encoding"
+             << "true";
+    args << "-c:v" << codec << "-f"
+         << "rawvideo"
+         << "pipe:";
+    LOG_DEBUG() << ffmpegPath + " " + args.join(' ');
+    proc.setStandardOutputFile(QProcess::nullDevice());
+    proc.setReadChannel(QProcess::StandardError);
+    proc.start(ffmpegPath, args, QIODevice::ReadOnly);
+    bool started = proc.waitForStarted(2000);
+    bool finished = false;
+    if (processEvents)
+        QCoreApplication::processEvents();
+    if (started) {
+        finished = proc.waitForFinished(4000);
+        if (processEvents)
+            QCoreApplication::processEvents();
+    }
+    if (started && finished && proc.exitStatus() == QProcess::NormalExit && !proc.exitCode()) {
+        return true;
+    } else {
+        QString output = proc.readAll();
+        foreach (const QString &line, output.split(QRegularExpression("[\r\n]"), Qt::SkipEmptyParts))
+            LOG_DEBUG() << line;
+    }
+    return false;
+}
+
 bool EncodeDock::detectHardwareEncoders()
 {
     MAIN.showStatusMessage(tr("Detecting hardware encoders..."));
     QStringList hwlist;
     QFileInfo ffmpegPath(qApp->applicationDirPath(), "ffmpeg");
     for (const QString &codec : codecs()) {
-        LOG_INFO() << "checking for" << codec;
-        QProcess proc;
-        QStringList args;
-        args << "-hide_banner"
-             << "-f"
-             << "lavfi"
-             << "-i"
-             << "color=s=640x360"
-             << "-frames"
-             << "1"
-             << "-an";
-        if (codec.endsWith("_vaapi"))
-            args << "-init_hw_device"
-                 << "vaapi=vaapi0:"
-                 << "-filter_hw_device"
-                 << "vaapi0"
-                 << "-vf"
-                 << "format=nv12,hwupload";
-        else if (codec == "hevc_qsv")
-            args << "-load_plugin"
-                 << "hevc_hw";
-        else if (codec.endsWith("_videotoolbox"))
-            args << "-pix_fmt"
-                 << "nv12";
-        else if (codec.endsWith("_mf"))
-            args << "-pix_fmt"
-                 << "nv12"
-                 << "-hw_encoding"
-                 << "true";
-        args << "-c:v" << codec << "-f"
-             << "rawvideo"
-             << "pipe:";
-        LOG_DEBUG() << ffmpegPath.absoluteFilePath() + " " + args.join(' ');
-        proc.setStandardOutputFile(QProcess::nullDevice());
-        proc.setReadChannel(QProcess::StandardError);
-        proc.start(ffmpegPath.absoluteFilePath(), args, QIODevice::ReadOnly);
-        bool started = proc.waitForStarted(2000);
-        bool finished = false;
-        QCoreApplication::processEvents();
-        if (started) {
-            finished = proc.waitForFinished(4000);
-            QCoreApplication::processEvents();
-        }
-        if (started && finished && proc.exitStatus() == QProcess::NormalExit && !proc.exitCode()) {
+        if (probeHardwareEncoder(ffmpegPath.absoluteFilePath(), codec, true))
             hwlist << codec;
-        } else {
-            QString output = proc.readAll();
-            foreach (const QString &line,
-                     output.split(QRegularExpression("[\r\n]"), Qt::SkipEmptyParts))
-                LOG_DEBUG() << line;
-        }
     }
     if (hwlist.isEmpty()) {
         MAIN.showStatusMessage(tr("Nothing found"), 10);
@@ -2848,6 +2867,50 @@ bool EncodeDock::detectHardwareEncoders()
         Settings.setEncodeHardware(hwlist);
     }
     return !hwlist.isEmpty();
+}
+
+// Debut Pro: unless the user already chose, look for a working hardware encoder
+// (VideoToolbox on macOS; NVENC, AMF, or QSV on Windows) in the background and,
+// if one is found, turn on "Use hardware encoder" by default.
+void EncodeDock::autoDetectHardwareEncoders()
+{
+    if (m_hwAutoDetectStarted || Settings.encodeUseHardwareIsSet()
+        || !Settings.encodeHardware().isEmpty())
+        return;
+    m_hwAutoDetectStarted = true;
+    LOG_INFO() << "detecting hardware encoders in the background";
+
+    auto watcher = new QFutureWatcher<QStringList>(this);
+    connect(watcher, &QFutureWatcher<QStringList>::finished, this, [this, watcher]() {
+        const auto hwlist = watcher->result();
+        watcher->deleteLater();
+        // Leave it alone if the user configured hardware encoding meanwhile.
+        if (Settings.encodeUseHardwareIsSet() || !Settings.encodeHardware().isEmpty())
+            return;
+        if (hwlist.isEmpty()) {
+            LOG_INFO() << "no hardware encoder found";
+            // Remember the result so that detection does not run every time.
+            Settings.setEncodeUseHardware(false);
+            return;
+        }
+        LOG_INFO() << "using hardware encoders" << hwlist;
+        Settings.setEncodeHardware(hwlist);
+        ui->hwencodeCheckBox->setChecked(true);
+        on_hwencodeCheckBox_clicked(true);
+        MAIN.showStatusMessage(tr("Using hardware encoder: %1").arg(hwlist.join(", ")));
+    });
+    const auto ffmpegPath = QFileInfo(qApp->applicationDirPath(), "ffmpeg").absoluteFilePath();
+    const auto cancel = m_hwAutoDetectCancel;
+    watcher->setFuture(QtConcurrent::run([ffmpegPath, cancel]() {
+        QStringList hwlist;
+        for (const QString &codec : codecs()) {
+            if (*cancel)
+                break;
+            if (probeHardwareEncoder(ffmpegPath, codec, false))
+                hwlist << codec;
+        }
+        return hwlist;
+    }));
 }
 
 QString &EncodeDock::defaultFormatExtension()

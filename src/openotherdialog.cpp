@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2025 Meltytech, LLC
+ * Copyright (c) 2012-2026 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -79,10 +79,12 @@ OpenOtherDialog::OpenOtherDialog(QWidget *parent)
             item->setData(0, Qt::UserRole, ui->textTab->objectName());
         }
     }
+#ifndef DEBUT_SLIM
     if (mltProducers->get_data("glaxnimate")) {
         QTreeWidgetItem *item = new QTreeWidgetItem(group, QStringList(tr("Drawing/Animation")));
         item->setData(0, Qt::UserRole, ui->glaxnimateTab->objectName());
     }
+#endif
     if (mltProducers->get_data("noise")) {
         QTreeWidgetItem *item = new QTreeWidgetItem(group, QStringList(tr("Noise")));
         item->setData(0, Qt::UserRole, ui->noiseTab->objectName());

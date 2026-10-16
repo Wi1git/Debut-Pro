@@ -142,6 +142,7 @@ public:
     bool encodeFreeSpaceCheck() const;
     void setEncodeFreeSpaceCheck(bool);
     bool encodeUseHardware() const;
+    bool encodeUseHardwareIsSet() const;
     void setEncodeUseHardware(bool);
     QStringList encodeHardware() const;
     void setEncodeHardware(const QStringList &);

@@ -1039,6 +1039,7 @@ QString Util::getExecutable(QWidget *parent)
                                         Util::getFileDialogOptions());
 }
 
+#ifndef DEBUT_SLIM
 QPair<bool, bool> Util::dockerStatus(const QString &imageName)
 {
     // Check if docker executable is available by running 'docker --version'.
@@ -1238,6 +1239,7 @@ void Util::isDockerImageCurrentAsync(const QString &imageRef,
     LOG_DEBUG() << "docker image inspect" << imageRef;
     localProc->start(Settings.dockerPath(), {"image", "inspect", imageRef});
 }
+#endif // DEBUT_SLIM
 
 bool Util::isChromiumAvailable()
 {

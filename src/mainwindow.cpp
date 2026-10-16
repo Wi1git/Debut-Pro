@@ -77,7 +77,9 @@
 #include "widgets/decklinkproducerwidget.h"
 #include "widgets/directshowvideowidget.h"
 #include "widgets/glaxnimateproducerwidget.h"
+#ifndef DEBUT_SLIM
 #include "widgets/htmlgeneratorwidget.h"
+#endif
 #include "widgets/imageproducerwidget.h"
 #include "widgets/isingwidget.h"
 #include "widgets/lissajouswidget.h"
@@ -114,7 +116,9 @@
 #include <QVersionNumber>
 #include <QWhatsThis>
 #include <QtConcurrent/QtConcurrentRun>
+#ifndef SHOTCUT_NOUPGRADE
 #include <QtNetwork>
+#endif
 #include <QtWidgets>
 
 #include <algorithm>
@@ -145,6 +149,7 @@ static QRegularExpression kBackupFileRegex("^(.+) "
                                            "([0-9]{4})-(1[0-2]|0[1-9])-(3[01]|0[1-9]|[12][0-9])T(2["
                                            "0-3]|[01][0-9])-([0-5][0-9])-([0-5][0-9]).mlt$");
 
+#ifndef SHOTCUT_NOUPGRADE
 static QNetworkRequest versionCheckRequest()
 {
     QNetworkRequest request{QUrl(QStringLiteral("https://check.shotcut.org/version.json"))};
@@ -153,6 +158,7 @@ static QNetworkRequest versionCheckRequest()
                          QNetworkRequest::NoLessSafeRedirectPolicy);
     return request;
 }
+#endif
 
 MainWindow::MainWindow()
     : QMainWindow(0)
@@ -164,7 +170,9 @@ MainWindow::MainWindow()
     , m_multipleFilesLoading(false)
     , m_isPlaylistLoaded(false)
     , m_exitCode(EXIT_SUCCESS)
+#ifndef SHOTCUT_NOUPGRADE
     , m_upgradeUrl("https://www.shotcut.org/download/")
+#endif
     , m_keyframesDock(0)
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
@@ -250,9 +258,11 @@ MainWindow::MainWindow()
     setFocus();
     setCurrentFile("");
 
+#ifndef SHOTCUT_NOUPGRADE
     connect(&m_network,
             SIGNAL(finished(QNetworkReply *)),
             SLOT(onUpgradeCheckFinished(QNetworkReply *)));
+#endif
     resetSourceUpdated();
     m_clipboardUpdatedAt.setSecsSinceEpoch(0);
     onClipboardChanged();
@@ -1726,19 +1736,21 @@ void MainWindow::setupOpenOtherMenu()
         }
     }
     if (mltProducers->get_data("glaxnimate")) {
+#ifndef DEBUT_SLIM
         ui->menuNew->addAction(tr("Drawing/Animation"), this, SLOT(onOpenOtherTriggered()))
             ->setObjectName("glaxnimate");
         otherMenu->addAction(ui->menuNew->actions().constLast());
+#endif
 
         ui->menuView->addAction(m_elementsDock->toggleViewAction());
         ui->menuNew->addAction(tr("Elements"), this, SLOT(onElementsDockTriggered()));
         otherMenu->addAction(ui->menuNew->actions().constLast());
     }
-#ifdef EXTERNAL_LAUNCHERS
+#if defined(EXTERNAL_LAUNCHERS) && !defined(DEBUT_SLIM)
     ui->menuNew->addAction(tr("Image/Video from HTML"), this, SLOT(onHtmlGeneratorTriggered()))
         ->setObjectName("html");
-#endif
     otherMenu->addAction(ui->menuNew->actions().constLast());
+#endif
     if (mltProducers->get_data("noise")) {
         ui->menuNew->addAction(tr("Noise"), this, SLOT(onOpenOtherTriggered()))
             ->setObjectName("noise");
@@ -3188,8 +3200,10 @@ void MainWindow::on_actionAbout_Shotcut_triggered()
             "<li><a href=\"https://opus-codec.org/\">Opus</a> audio codec</li>"
             "<li><a href=\"https://www.dyne.org/software/frei0r/\">Frei0r</a> video plugins</li>"
             "<li><a href=\"https://www.ladspa.org/\">LADSPA</a> audio plugins</li>"
+#ifndef DEBUT_SLIM
             "<li><a href=\"https://glaxnimate.org/\">Glaxnimate</a> vector drawing &amp; animation "
             "program</li>"
+#endif
             "</ul></p>"
             "<p>The source code used to build this program can be downloaded from "
             "<a href=\"%3\">%3</a>.</p>"
@@ -4485,8 +4499,10 @@ QWidget *MainWindow::loadProducerWidget(Mlt::Producer *producer)
         w = new DirectShowVideoWidget(this);
     else if (resource.startsWith("avfoundation:"))
         w = new AvfoundationProducerWidget(this);
+#ifndef DEBUT_SLIM
     else if (QString::fromLatin1(producer->get(kPrivateProducerProperty)) == "htmlGenerator")
         w = new HtmlGeneratorWidget(this);
+#endif
     else if (service.startsWith("avformat") || shotcutProducer == "avformat")
         w = new AvformatProducerWidget(this);
     else if (MLT.isImageProducer(producer)) {
@@ -4652,6 +4668,7 @@ void MainWindow::onShuttle(float x)
     }
 }
 
+#ifndef SHOTCUT_NOUPGRADE
 void MainWindow::showUpgradePrompt()
 {
     if (Settings.checkUpgradeAutomatic()) {
@@ -4663,6 +4680,7 @@ void MainWindow::showUpgradePrompt()
         showStatusMessage(action, 15 /* seconds */);
     }
 }
+#endif
 
 void MainWindow::on_actionRealtime_triggered(bool checked)
 {
@@ -5512,6 +5530,7 @@ void MainWindow::on_menuExternal_aboutToShow()
     }
 }
 
+#ifndef SHOTCUT_NOUPGRADE
 void MainWindow::on_actionUpgrade_triggered()
 {
     if (Settings.askUpgradeAutomatic()) {
@@ -5532,6 +5551,7 @@ void MainWindow::on_actionUpgrade_triggered()
     showStatusMessage("Checking for upgrade...");
     m_network.get(versionCheckRequest());
 }
+#endif
 
 void MainWindow::on_actionOpenXML_triggered()
 {
@@ -5703,6 +5723,7 @@ void MainWindow::onPlayerTabIndexChanged(int index)
         m_timelineDock->restoreSelection();
 }
 
+#ifndef SHOTCUT_NOUPGRADE
 void MainWindow::onUpgradeCheckFinished(QNetworkReply *reply)
 {
     if (!reply->error()) {
@@ -5746,6 +5767,7 @@ void MainWindow::onUpgradeTriggered()
 {
     Util::openUrl(QUrl(m_upgradeUrl));
 }
+#endif
 
 void MainWindow::onClipCopied()
 {
@@ -6433,6 +6455,7 @@ void MainWindow::onOpenOtherTriggered()
         onOpenOtherTriggered(new BlipProducerWidget(this));
 }
 
+#ifndef DEBUT_SLIM
 void MainWindow::onHtmlGeneratorTriggered()
 {
     if (!Util::isChromiumAvailable()) {
@@ -6466,6 +6489,7 @@ void MainWindow::onHtmlGeneratorTriggered()
     m_propertiesDock->raise();
     m_producerWidget.reset();
 }
+#endif
 
 void MainWindow::on_actionClearRecentOnExit_toggled(bool arg1)
 {

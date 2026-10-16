@@ -99,6 +99,7 @@ public:
     static bool hasiPhoneAmbisonic(Mlt::Producer *producer);
     static bool installFlatpakWrappers(QWidget *parent);
     static QString getExecutable(QWidget *parent);
+#ifndef DEBUT_SLIM
     // Returns a pair of booleans: (dockerInstalled, imagePresent)
     // imagePresent is only meaningful (true/false) if dockerInstalled is true; otherwise false.
     static QPair<bool, bool> dockerStatus(const QString &imageName);
@@ -109,6 +110,7 @@ public:
     static void isDockerImageCurrentAsync(const QString &imageRef,
                                           QObject *receiver,
                                           std::function<void(bool)> callback);
+#endif
     static bool isChromiumAvailable();
     static bool startDetached(const QString &program, const QStringList &arguments);
     static bool openUrl(const QUrl &url);
