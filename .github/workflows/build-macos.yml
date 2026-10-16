@@ -1,0 +1,219 @@
+name: Build macOS
+
+# Builds "Debut Pro.app" for Apple Silicon with scripts/build-shotcut.sh and
+# uploads it as DebutPro-macos-arm64.dmg. See docs/BUILDING-DEBUT-PRO.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      rebuild-dependencies:
+        description: Ignore the cached FFmpeg, MLT and other libraries and build them again
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  QT_VERSION: "6.10.3"
+  # Homebrew's bottles for the macos-15 runner are built for macOS 15, and they
+  # are bundled into the app, so the app needs macOS 15 (Sequoia) or newer.
+  MACOSX_DEPLOYMENT_TARGET: "15.0"
+  # Lets CMake 4 configure projects that still declare an ancient minimum (x265).
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  # Bump to throw away the dependency cache by hand.
+  CACHE_VERSION: "1"
+  HOMEBREW_NO_ANALYTICS: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+  HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
+  # Build tools, plus the libraries build-shotcut.sh expects from a package
+  # manager (MacPorts upstream). sdl2 is only needed by movit's configure
+  # script; nothing in the app links it.
+  BREW_PACKAGES: >-
+    autoconf automake libtool pkgconf cmake ninja meson nasm wget gettext
+    fftw libsamplerate sox libvorbis libogg theora lame libexif eigen libepoxy
+    glib lilv cairo libomp libxml2 sdl2
+
+jobs:
+  build:
+    name: macOS arm64
+    # macos-15 is an Apple Silicon (M1) runner. Homebrew only ships bottles for
+    # the three newest macOS releases (15, 26 and 27 at the time of writing), so
+    # on macos-14 every formula would be compiled from source. libvpx 1.15.2,
+    # pinned by the build script, does not know Darwin 25 (macOS 26) yet.
+    runs-on: macos-15
+    timeout-minutes: 300
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Install build tools and libraries (Homebrew)
+        run: |
+          set -euo pipefail
+          read -r -a packages <<< "$BREW_PACKAGES"
+          brew install --overwrite "${packages[@]}"
+
+          # The autogen scripts call libtoolize; Homebrew names it glibtoolize.
+          mkdir -p "$RUNNER_TEMP/bin"
+          ln -sf "$(brew --prefix)/bin/glibtoolize" "$RUNNER_TEMP/bin/libtoolize"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4.4.1
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: mac
+          target: desktop
+          # Shotcut needs Charts, Multimedia and WebSockets on top of the base
+          # (Core, Gui, Widgets, Network, Sql, Xml, OpenGL, Svg, Qml, Quick);
+          # imageformats adds the WebP/TIFF/... image plugins.
+          modules: qtcharts qtmultimedia qtwebsockets qtimageformats qtshadertools
+          cache: true
+
+      - name: Prepare build configuration
+        id: prep
+        env:
+          SCRIPTS_HASH: ${{ hashFiles('scripts/build-shotcut.sh', 'scripts/ci/macos.conf') }}
+        run: |
+          set -euo pipefail
+          # Shotcut-style version: YY.M.D (CMake needs plain numbers)
+          VERSION=$(date -u +%y.%m.%d | sed -E 's/(^|\.)0+([0-9])/\1\2/g')
+          # Everything is built outside the checkout, which is copied in as the Shotcut source.
+          ROOT="$RUNNER_TEMP/dp"
+          mkdir -p "$ROOT/logs" "$ROOT/out"
+          {
+            echo "INSTALL_DIR=\"$ROOT\""
+            echo "SOURCE_DIR=\"$ROOT/src\""
+            echo "SHOTCUT_LOCAL_SOURCE=\"$GITHUB_WORKSPACE\""
+            echo "SHOTCUT_VERSION=\"$VERSION\""
+            echo "QTDIR=\"$QT_ROOT_DIR\""
+            cat scripts/ci/macos.conf
+          } > "$ROOT/base.conf"
+          cat "$ROOT/base.conf"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "DP_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+          # The cached libraries link against Homebrew's libraries by file name,
+          # so rebuild them when one of those names changes (a new major version).
+          read -r -a packages <<< "$BREW_PACKAGES"
+          prefix=$(brew --prefix)
+          {
+            echo "macOS $(sw_vers -productVersion | cut -d. -f1), SDK $(xcrun --show-sdk-version | cut -d. -f1)"
+            for formula in $( { printf '%s\n' "${packages[@]}"; brew deps --union "${packages[@]}"; } | sort -u); do
+              find "$prefix/opt/$formula/lib/" -maxdepth 1 -name '*.dylib' -exec basename {} \; 2>/dev/null || true
+            done | sort -u
+          } > "$ROOT/logs/toolchain.txt"
+          brew list --versions > "$ROOT/logs/homebrew-versions.txt"
+          xcodebuild -version >> "$ROOT/logs/homebrew-versions.txt"
+          toolchain=$(shasum -a 256 < "$ROOT/logs/toolchain.txt" | cut -c1-16)
+          echo "cache-key=deps-macos-arm64-v$CACHE_VERSION-qt$QT_VERSION-$MACOSX_DEPLOYMENT_TARGET-${SCRIPTS_HASH:0:16}-$toolchain" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached dependencies
+        id: cache
+        if: ${{ !inputs.rebuild-dependencies }}
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/dp/build
+          key: ${{ steps.prep.outputs.cache-key }}
+
+      - name: Build dependencies (FFmpeg, MLT, x264, ...)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          rm -rf "$DP_ROOT/build" "$DP_ROOT/src"
+
+          # The SWH LADSPA plugins generate their sources with makestub.pl
+          # (#!/usr/bin/perl), which needs XML::Parser and List::MoreUtils.
+          perl5="$RUNNER_TEMP/perl5"
+          mkdir -p "$perl5/lib/perl5/List"
+          if ! /usr/bin/perl -MList::MoreUtils -e1 2>/dev/null; then
+            # makestub.pl only uses any(), which the core List::Util provides.
+            printf '%s\n' 'package List::MoreUtils;' 'use strict;' 'use warnings;' \
+              'use List::Util qw(any);' 'use Exporter qw(import);' 'our @EXPORT_OK = qw(any);' '1;' \
+              > "$perl5/lib/perl5/List/MoreUtils.pm"
+          fi
+          if ! PERL5LIB="$perl5/lib/perl5" /usr/bin/perl -MXML::Parser -e1 2>/dev/null; then
+            curl -fsSL https://cpanmin.us -o "$RUNNER_TEMP/cpanm"
+            /usr/bin/perl "$RUNNER_TEMP/cpanm" --notest --local-lib "$perl5" XML::Parser
+          fi
+          export PERL5LIB="$perl5/lib/perl5"
+          /usr/bin/perl -MXML::Parser -MList::MoreUtils=any -e 'print "Perl modules OK\n"'
+
+          # MLT needs libxml2, which is keg-only in Homebrew. The pkg-config
+          # file Homebrew provides for macOS' own copy has no include flags.
+          # (Set here because setup-python, run by install-qt-action, replaces
+          # PKG_CONFIG_PATH.)
+          libxml2_pc="$(brew --prefix libxml2)/lib/pkgconfig"
+          export PKG_CONFIG_PATH="$libxml2_pc${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          pkg-config --cflags libxml-2.0
+
+          {
+            cat "$DP_ROOT/base.conf"
+            echo 'SUBDIRS_EXCLUDE="shotcut"'
+            echo 'CREATE_STARTUP_SCRIPT=0'
+          } > "$DP_ROOT/deps.conf"
+          bash scripts/build-shotcut.sh -c "$DP_ROOT/deps.conf" 2>&1 | tee "$DP_ROOT/logs/build-dependencies.log"
+          test -f "$DP_ROOT/build/lib/pkgconfig/mlt++-7.pc"
+
+      - name: Save dependencies to the cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/dp/build
+          key: ${{ steps.prep.outputs.cache-key }}
+
+      - name: Free disk space
+        run: rm -rf "$DP_ROOT/src"
+
+      - name: Build Debut Pro
+        run: |
+          set -euo pipefail
+          {
+            cat "$DP_ROOT/base.conf"
+            echo 'SUBDIRS="shotcut"'
+          } > "$DP_ROOT/app.conf"
+          bash scripts/build-shotcut.sh -c "$DP_ROOT/app.conf" 2>&1 | tee "$DP_ROOT/logs/build-app.log"
+          test -x "$DP_ROOT/src/shotcut/Shotcut.app/Contents/MacOS/Shotcut"
+
+      - name: Sign and package
+        id: package
+        run: bash scripts/ci/package-macos.sh "$DP_ROOT/src/shotcut/Shotcut.app" "$VERSION" "$DP_ROOT/out" COPYING
+
+      - name: Upload disk image
+        uses: actions/upload-artifact@v7
+        with:
+          # With archive: false the file is uploaded as is and its name is the artifact name.
+          path: ${{ steps.package.outputs.artifact }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Verify the package
+        timeout-minutes: 15
+        env:
+          APP: ${{ steps.package.outputs.app }}
+        run: bash scripts/ci/verify-macos.sh "$APP"
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-logs-macos-arm64
+          path: |
+            ${{ runner.temp }}/dp/logs/
+            ${{ runner.temp }}/dp/*.conf
+            ${{ runner.temp }}/dp/src/FFmpeg/ffbuild/config.log
+            ${{ runner.temp }}/dp/src/*/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/dp/src/*/build/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/dp/src/*/source/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/dp/src/*/config.log
+            ${{ runner.temp }}/dp/src/*/builddir/meson-logs/meson-log.txt
+          if-no-files-found: ignore
+          retention-days: 14

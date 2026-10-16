@@ -1,0 +1,272 @@
+name: Build Windows
+
+# Builds the portable "Debut Pro" folder for Windows x64 with
+# scripts/build-shotcut-msys2.sh (MSYS2 UCRT64, like upstream Shotcut) and
+# uploads it as DebutPro-windows-x64.zip. See docs/BUILDING-DEBUT-PRO.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      rebuild-dependencies:
+        description: Ignore the cached FFmpeg, MLT and other libraries and build them again
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Lets CMake 4 configure projects that declare an ancient minimum version
+  # (a safety net: frei0r is built from its main branch).
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  # Bump to throw away the dependency cache by hand.
+  CACHE_VERSION: "1"
+
+jobs:
+  build:
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 300
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      # Same packages as upstream's build-windows.yml, minus what only Whisper
+      # (OpenBLAS, gcc-fortran, Vulkan) and Glaxnimate (libarchive,
+      # libimagequant, potrace, python-pip) need, plus SDL2 (named explicitly
+      # so pacman does not pick sdl2-compat, which needs SDL3 at run time),
+      # patch (FFmpeg patch) and wget (rnnoise downloads its model with it).
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            autotools base-devel bzip2 coreutils git gzip patch tar wget xz zip
+            perl-List-MoreUtils perl-XML-Parser
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-meson
+            mingw-w64-ucrt-x86_64-nasm
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-yasm
+            mingw-w64-ucrt-x86_64-cairo
+            mingw-w64-ucrt-x86_64-eigen3
+            mingw-w64-ucrt-x86_64-dlfcn
+            mingw-w64-ucrt-x86_64-fftw
+            mingw-w64-ucrt-x86_64-gettext-tools
+            mingw-w64-ucrt-x86_64-harfbuzz
+            mingw-w64-ucrt-x86_64-ladspa-sdk
+            mingw-w64-ucrt-x86_64-lame
+            mingw-w64-ucrt-x86_64-libepoxy
+            mingw-w64-ucrt-x86_64-libexif
+            mingw-w64-ucrt-x86_64-libsamplerate
+            mingw-w64-ucrt-x86_64-libtheora
+            mingw-w64-ucrt-x86_64-libvorbis
+            mingw-w64-ucrt-x86_64-libvpl
+            mingw-w64-ucrt-x86_64-libvpx
+            mingw-w64-ucrt-x86_64-libwebp
+            mingw-w64-ucrt-x86_64-libxml2
+            mingw-w64-ucrt-x86_64-lilv
+            mingw-w64-ucrt-x86_64-openssl
+            mingw-w64-ucrt-x86_64-opus
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-charts
+            mingw-w64-ucrt-x86_64-qt6-declarative
+            mingw-w64-ucrt-x86_64-qt6-imageformats
+            mingw-w64-ucrt-x86_64-qt6-multimedia
+            mingw-w64-ucrt-x86_64-qt6-multimedia-wmf
+            mingw-w64-ucrt-x86_64-qt6-svg
+            mingw-w64-ucrt-x86_64-qt6-tools
+            mingw-w64-ucrt-x86_64-qt6-translations
+            mingw-w64-ucrt-x86_64-qt6-websockets
+            mingw-w64-ucrt-x86_64-rubberband
+            mingw-w64-ucrt-x86_64-SDL2
+            mingw-w64-ucrt-x86_64-sox
+            mingw-w64-ucrt-x86_64-svt-av1
+            mingw-w64-ucrt-x86_64-vid.stab
+            mingw-w64-ucrt-x86_64-x264
+            mingw-w64-ucrt-x86_64-x265
+            mingw-w64-ucrt-x86_64-zimg
+
+      - name: Prepare build configuration
+        id: prep
+        env:
+          SCRIPTS_HASH: ${{ hashFiles('scripts/build-shotcut-msys2.sh', 'scripts/ci/windows.conf') }}
+        run: |
+          set -euo pipefail
+          # Shotcut-style version: YY.M.D (CMake needs plain numbers)
+          VERSION=$(date -u +%y.%m.%d | sed -E 's/(^|\.)0+([0-9])/\1\2/g')
+          # Everything is built outside the checkout, which is copied in as the Shotcut source.
+          ROOT="$(cygpath -u "$RUNNER_TEMP")/dp"
+          mkdir -p "$ROOT/logs" "$ROOT/out"
+          {
+            echo "INSTALL_DIR=\"$ROOT\""
+            echo "SOURCE_DIR=\"$ROOT/src\""
+            echo "SHOTCUT_LOCAL_SOURCE=\"$(pwd)\""
+            echo "SHOTCUT_VERSION=\"$VERSION\""
+            cat scripts/ci/windows.conf
+          } > "$ROOT/base.conf"
+          cat "$ROOT/base.conf"
+          pacman -Q > "$ROOT/logs/msys2-packages.txt"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "DP_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+          # The cached libraries link against MSYS2's DLLs by file name, so
+          # rebuild them when one of those names changes (a new major version)
+          # or the compiler's major version changes.
+          {
+            echo "gcc $(gcc -dumpversion | cut -d. -f1)"
+            find /ucrt64/bin -maxdepth 1 -iname '*.dll' -printf '%f\n' | sort
+          } > "$ROOT/logs/toolchain.txt"
+          toolchain=$(sha256sum < "$ROOT/logs/toolchain.txt" | cut -c1-16)
+          echo "cache-key=deps-windows-x64-v$CACHE_VERSION-${SCRIPTS_HASH:0:16}-$toolchain" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached dependencies
+        id: cache
+        if: ${{ !inputs.rebuild-dependencies }}
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/dp/Shotcut
+          key: ${{ steps.prep.outputs.cache-key }}
+
+      - name: Build dependencies (FFmpeg, MLT, frei0r, ...)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          rm -rf "$DP_ROOT/Shotcut" "$DP_ROOT/src"
+          {
+            cat "$DP_ROOT/base.conf"
+            echo 'SUBDIRS_EXCLUDE="shotcut"'
+            echo 'DEPLOY=0'
+          } > "$DP_ROOT/deps.conf"
+          bash scripts/build-shotcut-msys2.sh -c "$DP_ROOT/deps.conf" 2>&1 | tee "$DP_ROOT/logs/build-dependencies.log"
+          test -f "$DP_ROOT/Shotcut/lib/pkgconfig/mlt++-7.pc"
+
+      - name: Save dependencies to the cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/dp/Shotcut
+          key: ${{ steps.prep.outputs.cache-key }}
+
+      - name: Build Debut Pro
+        run: |
+          set -euo pipefail
+          {
+            cat "$DP_ROOT/base.conf"
+            echo 'SUBDIRS="shotcut"'
+          } > "$DP_ROOT/app.conf"
+          bash scripts/build-shotcut-msys2.sh -c "$DP_ROOT/app.conf" 2>&1 | tee "$DP_ROOT/logs/build-app.log"
+          test -f "$DP_ROOT/Shotcut/shotcut.exe"
+
+      - name: Package
+        id: package
+        run: bash scripts/ci/package-windows.sh "$DP_ROOT/Shotcut" "$VERSION" "$DP_ROOT/out"
+
+      - name: Upload portable zip
+        uses: actions/upload-artifact@v7
+        with:
+          # With archive: false the file is uploaded as is and its name is the artifact name.
+          path: ${{ runner.temp }}/dp/out/DebutPro-windows-x64.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Verify the package
+        shell: pwsh
+        timeout-minutes: 15
+        env:
+          APP_DIR: ${{ runner.temp }}\dp\out\stage\Debut Pro
+        run: |
+          $ErrorActionPreference = 'Continue'
+          # Only Windows itself on the PATH, so every DLL must come from the app folder.
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          # A missing DLL must make a program exit with an error code instead of
+          # waiting for someone to close a "System Error" dialog. Child processes
+          # inherit this error mode.
+          Add-Type -Namespace DebutPro -Name Kernel32 -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint uMode);'
+          [void][DebutPro.Kernel32]::SetErrorMode(0x8003)
+          $script:failures = 0
+          function Fail([string]$message) {
+            Write-Output "::error::$message"
+            $script:failures++
+          }
+
+          foreach ($p in 'Debut Pro.exe', 'melt.exe', 'ffmpeg.exe', 'ffprobe.exe', 'qt.conf', 'COPYING.txt',
+                         'lib\qt6\platforms\qwindows.dll', 'lib\qt6\sqldrivers\qsqlite.dll', 'lib\qml\QtQuick\Controls',
+                         'lib\mlt', 'lib\frei0r-1', 'lib\ladspa', 'share\mlt\profiles', 'share\movit',
+                         'share\shotcut\qml', 'share\translations') {
+            if (-not (Test-Path -LiteralPath (Join-Path $env:APP_DIR $p))) { Fail "$p is missing" }
+          }
+
+          $ffmpeg = Join-Path $env:APP_DIR 'ffmpeg.exe'
+          $encoders = & $ffmpeg -hide_banner -encoders 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) { Fail "ffmpeg -encoders failed ($LASTEXITCODE): $encoders" }
+          foreach ($e in 'h264_nvenc', 'hevc_nvenc', 'av1_nvenc', 'h264_amf', 'hevc_amf', 'h264_qsv', 'hevc_qsv',
+                         'libx264', 'libx265', 'libsvtav1', 'libvpx-vp9', 'libopus', 'libmp3lame', 'libwebp') {
+            if ($encoders -notmatch "\s$([regex]::Escape($e))\s") { Fail "ffmpeg is missing encoder $e" }
+          }
+          $decoders = & $ffmpeg -hide_banner -decoders 2>&1 | Out-String
+          foreach ($d in 'libdav1d', 'h264_cuvid', 'hevc_cuvid') {
+            if ($decoders -notmatch "\s$([regex]::Escape($d))\s") { Fail "ffmpeg is missing decoder $d" }
+          }
+          $hwaccels = & $ffmpeg -hide_banner -hwaccels 2>&1 | Out-String
+          foreach ($h in 'cuda', 'd3d11va', 'dxva2', 'qsv') {
+            if ($hwaccels -notmatch "(?m)^\s*$h\s*$") { Fail "ffmpeg is missing hwaccel $h" }
+          }
+          & $ffmpeg -hide_banner -version | Select-Object -First 1
+
+          # Loads every MLT module (and frei0r plugin), which catches DLLs missing from the package.
+          $melt = Join-Path $env:APP_DIR 'melt.exe'
+          $services = & $melt -query 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) { Fail "melt -query failed ($LASTEXITCODE): $services" }
+          foreach ($s in 'avformat', 'xml', 'qimage', 'qtblend', 'movit.blur', 'rbpitch', 'vidstab', 'sox',
+                         'rnnoise', 'ladspa', 'frei0r.cairoblend', 'rtaudio', 'sdl2_audio') {
+            if ($services -notmatch "(?m)^\s*-\s+$([regex]::Escape($s))\s*$") { Fail "MLT service $s is missing" }
+          }
+
+          # A missing DLL makes the app exit immediately with STATUS_DLL_NOT_FOUND.
+          $env:QT_COMMAND_LINE_PARSER_NO_GUI_MESSAGE_BOXES = '1'
+          $app = Start-Process -FilePath (Join-Path $env:APP_DIR 'Debut Pro.exe') -ArgumentList '--version' -PassThru
+          # Keep the process handle; without it ExitCode can come back empty.
+          $null = $app.Handle
+          if (-not $app.WaitForExit(60000)) {
+            Write-Output '::warning::Debut Pro.exe --version was still running after 60 s'
+            Stop-Process -Id $app.Id -Force
+          } elseif ($app.ExitCode -ne 0) {
+            Fail ('Debut Pro.exe --version exited with code 0x{0:X8}' -f $app.ExitCode)
+          }
+
+          if ($script:failures -gt 0) {
+            Write-Output "$($script:failures) problem(s) found"
+            exit 1
+          }
+          Write-Output 'All checks passed'
+          exit 0
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-logs-windows-x64
+          path: |
+            ${{ runner.temp }}/dp/logs/
+            ${{ runner.temp }}/dp/*.conf
+            ${{ runner.temp }}/dp/src/FFmpeg/ffbuild/config.log
+            ${{ runner.temp }}/dp/src/*/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/dp/src/*/build/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/dp/src/*/config.log
+            ${{ runner.temp }}/dp/src/*/builddir/meson-logs/meson-log.txt
+          if-no-files-found: ignore
+          retention-days: 14

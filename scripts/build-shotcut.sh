@@ -114,6 +114,25 @@ RNNOISE_HEAD=1
 RNNOISE_REVISION=
 NV_CODEC_REVISION="sdk/12.0"
 MFX_DISPATCH_REVISION="1.25"
+# Build Shotcut from this local source tree (copied into $SOURCE_DIR/shotcut)
+# instead of cloning the upstream repository.
+SHOTCUT_LOCAL_SOURCE=
+# Space-separated list of subprojects to leave out of the computed SUBDIRS,
+# for example "shotcut" to build only the dependencies.
+SUBDIRS_EXCLUDE=
+# Extra arguments appended to the MLT cmake command line (later -D wins).
+MLT_ADDITIONAL_OPTIONS=
+# macOS: architectures to build ("arm64;x86_64" = universal, or a single
+# architecture that matches the build machine, e.g. "arm64").
+MACOS_ARCHITECTURES="arm64;x86_64"
+# macOS: prefix of the package manager that provides the remaining
+# dependencies (/opt/local for MacPorts, /opt/homebrew for Homebrew).
+MACOS_DEPS_PREFIX="/opt/local"
+# macOS: where the LLVM OpenMP runtime (libomp) headers and library are. Empty
+# means the MacPorts layout, $MACOS_DEPS_PREFIX/include/libomp and lib/libomp.
+# Homebrew's libomp is keg-only: /opt/homebrew/opt/libomp/include and lib.
+MACOS_OPENMP_INCLUDE_DIR=
+MACOS_OPENMP_LIB_DIR=
 
 PYTHON_VERSION_DEFAULT=3.10
 PYTHON_VERSION_DARWIN=3.11
@@ -545,6 +564,20 @@ function set_globals {
         SUBDIRS="rnnoise $SUBDIRS"
     fi
   fi
+  for EXCLUDE in $SUBDIRS_EXCLUDE; do
+    SUBDIRS=" $SUBDIRS "
+    SUBDIRS="${SUBDIRS// $EXCLUDE / }"
+  done
+
+  # macOS OpenMP runtime location (see MACOS_OPENMP_INCLUDE_DIR)
+  [ -z "$MACOS_OPENMP_INCLUDE_DIR" ] && MACOS_OPENMP_INCLUDE_DIR="$MACOS_DEPS_PREFIX/include/libomp"
+  [ -z "$MACOS_OPENMP_LIB_DIR" ] && MACOS_OPENMP_LIB_DIR="$MACOS_DEPS_PREFIX/lib/libomp"
+
+  # macOS compiler flags for the architectures to build, e.g. "-arch arm64 -arch x86_64"
+  MACOS_ARCH_FLAGS=
+  for ARCH in ${MACOS_ARCHITECTURES//;/ }; do
+    MACOS_ARCH_FLAGS="$MACOS_ARCH_FLAGS -arch $ARCH"
+  done
 
   if [ "$DEBUG_BUILD" = "1" ]; then
     CONFIGURE_DEBUG_FLAG="--enable-debug"
@@ -845,10 +878,21 @@ function set_globals {
   CFLAGS_[0]="-I$FINAL_INSTALL_DIR/include -Wno-incompatible-pointer-types $CFLAGS"
   LDFLAGS_[0]="-L$FINAL_INSTALL_DIR/lib $LDFLAGS"
   if test "$TARGET_OS" = "Darwin"; then
-    CFLAGS_[0]="${CFLAGS_[0]} -I/opt/local/include"
-    LDFLAGS_[0]="${LDFLAGS_[0]} -L/opt/local/lib"
-    BUILD[0]="build_ffmpeg_darwin"
-    INSTALL[0]="install_ffmpeg_darwin"
+    CFLAGS_[0]="${CFLAGS_[0]} -I$MACOS_DEPS_PREFIX/include"
+    LDFLAGS_[0]="${LDFLAGS_[0]} -L$MACOS_DEPS_PREFIX/lib"
+    case "$MACOS_ARCHITECTURES" in
+      *";"*)
+        # Universal: build arm64 and x86_64 separately and combine them with lipo.
+        BUILD[0]="build_ffmpeg_darwin"
+        INSTALL[0]="install_ffmpeg_darwin"
+        ;;
+      *)
+        # Single architecture (the build machine's): a regular build.
+        CONFIG[0]="${CONFIG[0]} --prefix=$FINAL_INSTALL_DIR"
+        BUILD[0]="make -j$MAKEJ"
+        INSTALL[0]="make install"
+        ;;
+    esac
   elif test "$TARGET_OS" = "Linux" ; then
     CONFIG[0]="${CONFIG[0]} --enable-libpulse --prefix=$FINAL_INSTALL_DIR"
     BUILD[0]="make -j$MAKEJ"
@@ -863,18 +907,21 @@ function set_globals {
   [ "$MLT_DISABLE_SOX" = "1" ] && CONFIG[1]="${CONFIG[1]} -DMOD_SOX=OFF"
   CFLAGS_[1]="-I$FINAL_INSTALL_DIR/include $ASAN_CFLAGS $CFLAGS"
   if [ "$TARGET_OS" = "Darwin" ]; then
-    CONFIG[1]="${CONFIG[1]} -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
+    CONFIG[1]="${CONFIG[1]} -DCMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES'"
     if [ "$DEBUG_BUILD" = "1" ]; then
       CONFIG[1]="${CONFIG[1]} -DCMAKE_BUILD_TYPE=Debug"
     else
       CONFIG[1]="${CONFIG[1]} -DCMAKE_BUILD_TYPE=RelWithDebInfo"
     fi
-    CONFIG[1]="${CONFIG[1]} -DOpenMP_C_FLAGS=-I/opt/local/include/libomp -DOpenMP_CXX_FLAGS=-I/opt/local/include/libomp -DOpenMP_C_LIB_NAMES=libomp -DOpenMP_CXX_LIB_NAMES=libomp -DOpenMP_libomp_LIBRARY=omp"
-    CFLAGS_[1]="${CFLAGS_[1]} -I/opt/local/include"
-    LDFLAGS_[1]="${LDFLAGS_[1]} -L/opt/local/lib/libomp"
+    CONFIG[1]="${CONFIG[1]} -DOpenMP_C_FLAGS=-I$MACOS_OPENMP_INCLUDE_DIR -DOpenMP_CXX_FLAGS=-I$MACOS_OPENMP_INCLUDE_DIR -DOpenMP_C_LIB_NAMES=libomp -DOpenMP_CXX_LIB_NAMES=libomp -DOpenMP_libomp_LIBRARY=omp"
+    CFLAGS_[1]="${CFLAGS_[1]} -I$MACOS_DEPS_PREFIX/include"
+    LDFLAGS_[1]="${LDFLAGS_[1]} -L$MACOS_OPENMP_LIB_DIR"
   else
     CONFIG[1]="${CONFIG[1]} $CMAKE_DEBUG_FLAG"
   fi
+  # The spatialaudio module requires libspatialaudio.
+  [ "$ENABLE_LIBSPATIALAUDIO" != "1" ] && CONFIG[1]="${CONFIG[1]} -DMOD_SPATIALAUDIO=OFF"
+  [ -n "$MLT_ADDITIONAL_OPTIONS" ] && CONFIG[1]="${CONFIG[1]} $MLT_ADDITIONAL_OPTIONS"
   CXXFLAGS_[1]="${CFLAGS_[1]} -std=c++11"
   LDFLAGS_[1]="${LDFLAGS_[1]} -L$FINAL_INSTALL_DIR/lib $ASAN_LDFLAGS $LDFLAGS"
   BUILD[1]="ninja -C build -j $MAKEJ"
@@ -883,7 +930,7 @@ function set_globals {
   #####
   # frei0r
   CONFIG[2]="cmake -GNinja -DCMAKE_INSTALL_PREFIX=$FINAL_INSTALL_DIR -DWITHOUT_GAVL=1 -DWITHOUT_OPENCV=1 $CMAKE_DEBUG_FLAG"
-  [ "$TARGET_OS" = "Darwin" ] && CONFIG[2]="${CONFIG[2]} -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
+  [ "$TARGET_OS" = "Darwin" ] && CONFIG[2]="${CONFIG[2]} -DCMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES'"
   CFLAGS_[2]=$CFLAGS
   LDFLAGS_[2]=$LDFLAGS
   BUILD[2]="ninja -j $MAKEJ"
@@ -918,7 +965,7 @@ function set_globals {
   # movit
   CONFIG[5]="./autogen.sh --prefix=$FINAL_INSTALL_DIR"
   if test "$TARGET_OS" = "Darwin"; then
-    CFLAGS_[5]="$CFLAGS -I/opt/local/include"
+    CFLAGS_[5]="$CFLAGS -I$MACOS_DEPS_PREFIX/include"
   else
     CFLAGS_[5]="$CFLAGS"
   fi
@@ -934,7 +981,7 @@ function set_globals {
   #####
   # libspatialaudio
   CONFIG[6]="cmake -G Ninja -B build -D CMAKE_INSTALL_PREFIX=$FINAL_INSTALL_DIR $CMAKE_DEBUG_FLAG"
-  [ "$TARGET_OS" = "Darwin" ] && CONFIG[6]="${CONFIG[6]} -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
+  [ "$TARGET_OS" = "Darwin" ] && CONFIG[6]="${CONFIG[6]} -DCMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES'"
   CFLAGS_[6]="$CFLAGS"
   LDFLAGS_[6]="$LDFLAGS"
   BUILD[6]="ninja -C build -j $MAKEJ"
@@ -945,7 +992,7 @@ function set_globals {
   CONFIG[7]="cmake -G Ninja -D CMAKE_PREFIX_PATH=$QTDIR -D SHOTCUT_VERSION=$SHOTCUT_VERSION $CMAKE_DEBUG_FLAG"
   if test "$TARGET_OS" = "Darwin" ; then
     CONFIG[7]="${CONFIG[7]} -D CMAKE_INSTALL_PREFIX=."
-    CONFIG[7]="${CONFIG[7]} -D CMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
+    CONFIG[7]="${CONFIG[7]} -D CMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES'"
   else
     CONFIG[7]="${CONFIG[7]} -D CMAKE_INSTALL_PREFIX=$FINAL_INSTALL_DIR -D BUILD_MINIMAL_MEDIA_BACKEND=ON"
   fi
@@ -983,9 +1030,9 @@ function set_globals {
   # vid.stab
   CONFIG[10]="cmake -GNinja -DCMAKE_INSTALL_PREFIX=$FINAL_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib $CMAKE_DEBUG_FLAG"
   if test "$TARGET_OS" = "Darwin" ; then
-    CONFIG[10]="${CONFIG[10]} -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
-    CONFIG[10]="${CONFIG[10]} -DOpenMP_C_FLAGS=-I/opt/local/include/libomp -DOpenMP_C_LIB_NAMES=libomp -DOpenMP_libomp_LIBRARY=omp"
-    LDFLAGS_[10]="$LDFLAGS -L/opt/local/lib/libomp"
+    CONFIG[10]="${CONFIG[10]} -DCMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES'"
+    CONFIG[10]="${CONFIG[10]} -DOpenMP_C_FLAGS=-I$MACOS_OPENMP_INCLUDE_DIR -DOpenMP_C_LIB_NAMES=libomp -DOpenMP_libomp_LIBRARY=omp"
+    LDFLAGS_[10]="$LDFLAGS -L$MACOS_OPENMP_LIB_DIR"
   fi
   CFLAGS_[10]=$CFLAGS
   BUILD[10]="ninja -j $MAKEJ"
@@ -996,7 +1043,7 @@ function set_globals {
   [ ! -e "$SOURCE_DIR"/opus/configure ] && PRECONFIG[12]="./autogen.sh"
   CONFIG[12]="./configure --prefix=$FINAL_INSTALL_DIR"
   if test "$TARGET_OS" = "Darwin"; then
-    CFLAGS_[12]="$CFLAGS -I/opt/local/include"
+    CFLAGS_[12]="$CFLAGS -I$MACOS_DEPS_PREFIX/include"
   else
     CFLAGS_[12]="$CFLAGS"
   fi
@@ -1042,7 +1089,7 @@ function set_globals {
   #####
   # bigsh0t
   CONFIG[19]="cmake -GNinja -DCMAKE_INSTALL_PREFIX=$FINAL_INSTALL_DIR $CMAKE_DEBUG_FLAG"
-  [ "$TARGET_OS" = "Darwin" ] && CONFIG[19]="${CONFIG[19]} -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
+  [ "$TARGET_OS" = "Darwin" ] && CONFIG[19]="${CONFIG[19]} -DCMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES'"
   CFLAGS_[19]=$CFLAGS
   LDFLAGS_[19]=$LDFLAGS
   BUILD[19]="ninja -j $MAKEJ"
@@ -1053,7 +1100,7 @@ function set_globals {
   [ ! -e "$SOURCE_DIR"/zimg/configure ] && PRECONFIG[20]="./autogen.sh"
   CONFIG[20]="./configure --prefix=$FINAL_INSTALL_DIR"
   if test "$TARGET_OS" = "Darwin"; then
-    CFLAGS_[20]="$CFLAGS -I/opt/local/include"
+    CFLAGS_[20]="$CFLAGS -I$MACOS_DEPS_PREFIX/include"
   else
     CFLAGS_[20]="$CFLAGS"
   fi
@@ -1105,7 +1152,7 @@ function set_globals {
   # glaxnimate
   CONFIG[24]="cmake -G Ninja -DCMAKE_PREFIX_PATH='$FINAL_INSTALL_DIR;$QTDIR' -DCMAKE_INSTALL_PREFIX=$FINAL_INSTALL_DIR $CMAKE_DEBUG_FLAG"
   if [ "$TARGET_OS" = "Darwin" ]; then
-    CONFIG[24]="${CONFIG[24]} -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
+    CONFIG[24]="${CONFIG[24]} -DCMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES'"
     CONFIG[24]="${CONFIG[24]} -DPython3_EXECUTABLE=/opt/local/Library/Frameworks/Python.framework/Versions/${PYTHON_VERSION}/bin/python${PYTHON_VERSION_DARWIN}"
   fi
   CFLAGS_[24]="$ASAN_CFLAGS $CFLAGS"
@@ -1116,7 +1163,7 @@ function set_globals {
   #####
   # gopro2gpx
   CONFIG[25]="cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$FINAL_INSTALL_DIR $CMAKE_DEBUG_FLAG"
-  [ "$TARGET_OS" = "Darwin" ] && CONFIG[25]="${CONFIG[25]} -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
+  [ "$TARGET_OS" = "Darwin" ] && CONFIG[25]="${CONFIG[25]} -DCMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES'"
   CFLAGS_[25]="$CFLAGS"
   LDFLAGS_[25]="$LDFLAGS"
   BUILD[25]="ninja -j $MAKEJ"
@@ -1128,8 +1175,8 @@ function set_globals {
   CFLAGS_[26]="$CFLAGS"
   LDFLAGS_[26]="$LDFLAGS"
   if [ "$TARGET_OS" = "Darwin" ]; then
-    CONFIG[26]="${CONFIG[26]} -D CMAKE_OSX_ARCHITECTURES='arm64;x86_64' -DWITH_KLEIDICV=OFF -DOpenMP_C_FLAGS=-I/opt/local/include/libomp -DOpenMP_CXX_FLAGS=-I/opt/local/include/libomp -DOpenMP_C_LIB_NAMES=libomp -DOpenMP_CXX_LIB_NAMES=libomp -DOpenMP_libomp_LIBRARY=omp"
-    LDFLAGS_[26]="${LDFLAGS_[26]} -L/opt/local/lib/libomp"
+    CONFIG[26]="${CONFIG[26]} -D CMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES' -DWITH_KLEIDICV=OFF -DOpenMP_C_FLAGS=-I$MACOS_OPENMP_INCLUDE_DIR -DOpenMP_CXX_FLAGS=-I$MACOS_OPENMP_INCLUDE_DIR -DOpenMP_C_LIB_NAMES=libomp -DOpenMP_CXX_LIB_NAMES=libomp -DOpenMP_libomp_LIBRARY=omp"
+    LDFLAGS_[26]="${LDFLAGS_[26]} -L$MACOS_OPENMP_LIB_DIR"
   fi
   BUILD[26]="ninja -C build -j $MAKEJ"
   INSTALL[26]="ninja -C build install"
@@ -1137,7 +1184,7 @@ function set_globals {
   #####
   # libwebp
   CONFIG[28]="cmake -B build -G Ninja -D CMAKE_INSTALL_PREFIX=$FINAL_INSTALL_DIR -D BUILD_SHARED_LIBS=ON $CMAKE_DEBUG_FLAG"
-  [ "$TARGET_OS" = "Darwin" ] && CONFIG[28]="${CONFIG[28]} -D CMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
+  [ "$TARGET_OS" = "Darwin" ] && CONFIG[28]="${CONFIG[28]} -D CMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES'"
   CFLAGS_[28]="$CFLAGS"
   LDFLAGS_[28]="$LDFLAGS"
   BUILD[28]="ninja -C build -j $MAKEJ"
@@ -1146,7 +1193,7 @@ function set_globals {
   #####
   # SVT-AV1
   CONFIG[29]="cmake -B build -G Ninja -D CMAKE_INSTALL_PREFIX=$FINAL_INSTALL_DIR $CMAKE_DEBUG_FLAG -D BUILD_SHARED_LIBS=ON -D BUILD_TESTING=OFF -D BUILD_APPS=OFF -D ENABLE_AVX512=ON"
-  [ "$TARGET_OS" = "Darwin" ] && CONFIG[29]="${CONFIG[29]} -D CMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
+  [ "$TARGET_OS" = "Darwin" ] && CONFIG[29]="${CONFIG[29]} -D CMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES'"
   CFLAGS_[29]=$CFLAGS
   LDFLAGS_[29]=$LDFLAGS
   BUILD[29]="ninja -C build -j $MAKEJ"
@@ -1155,11 +1202,11 @@ function set_globals {
   #####
   # whisper.cpp
   CONFIG[30]="cmake -B build -G Ninja -D CMAKE_INSTALL_PREFIX=$FINAL_INSTALL_DIR $CMAKE_DEBUG_FLAG -D BUILD_SHARED_LIBS=ON -D GGML_NATIVE=OFF -D GGML_AVX2=OFF -D WHISPER_BUILD_SERVER=OFF -D WHISPER_BUILD_TESTS=OFF"
-  [ "$TARGET_OS" = "Darwin" ] && CONFIG[30]="${CONFIG[30]} -D CMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
+  [ "$TARGET_OS" = "Darwin" ] && CONFIG[30]="${CONFIG[30]} -D CMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES'"
   if test "$TARGET_OS" = "Darwin" ; then
-    CONFIG[30]="${CONFIG[30]} -D CMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
-    CONFIG[30]="${CONFIG[30]} -D OpenMP_C_FLAGS=-I/opt/local/include/libomp -D OpenMP_CXX_FLAGS=-I/opt/local/include/libomp -D OpenMP_C_LIB_NAMES=libomp -D OpenMP_CXX_LIB_NAMES=libomp -D OpenMP_libomp_LIBRARY=omp"
-    LDFLAGS_[30]="$LDFLAGS -L /opt/local/lib/libomp"
+    CONFIG[30]="${CONFIG[30]} -D CMAKE_OSX_ARCHITECTURES='$MACOS_ARCHITECTURES'"
+    CONFIG[30]="${CONFIG[30]} -D OpenMP_C_FLAGS=-I$MACOS_OPENMP_INCLUDE_DIR -D OpenMP_CXX_FLAGS=-I$MACOS_OPENMP_INCLUDE_DIR -D OpenMP_C_LIB_NAMES=libomp -D OpenMP_CXX_LIB_NAMES=libomp -D OpenMP_libomp_LIBRARY=omp"
+    LDFLAGS_[30]="$LDFLAGS -L $MACOS_OPENMP_LIB_DIR"
   else
     CONFIG[30]="${CONFIG[30]} -D GGML_BLAS=ON -D GGML_BLAS_VENDOR=OpenBLAS -D GGML_VULKAN=1"
     CFLAGS_[30]=$CFLAGS
@@ -1222,7 +1269,7 @@ function install_ffmpeg_darwin {
 }
 
 function build_ladspa_darwin {
-  cmd make -j $MAKEJ CC="clang -arch arm64 -arch x86_64"
+  cmd make -j $MAKEJ CC="clang$MACOS_ARCH_FLAGS"
 }
 
 function install_ladspa {
@@ -1232,7 +1279,7 @@ function install_ladspa {
 }
 
 function build_movit_darwin {
-  cmd make -j $MAKEJ RANLIB="$RANLIB" CC="clang -arch arm64 -arch x86_64" CXX="clang++ -arch arm64 -arch x86_64" libmovit.la
+  cmd make -j $MAKEJ RANLIB="$RANLIB" CC="clang$MACOS_ARCH_FLAGS" CXX="clang++$MACOS_ARCH_FLAGS" libmovit.la
 }
 
 function install_shotcut_linux {
@@ -1299,7 +1346,7 @@ function install_whispercpp {
 }
 
 function build_rnnoise_darwin {
-  cmd make -j $MAKEJ CC="clang -arch arm64 -arch x86_64"
+  cmd make -j $MAKEJ CC="clang$MACOS_ARCH_FLAGS"
 }
 
 ######################################################################
@@ -1403,6 +1450,24 @@ function clean_dirs {
 }
 
 #################################################################
+# get_local_shotcut
+# Copies the local Shotcut source tree SHOTCUT_LOCAL_SOURCE to ./shotcut
+# instead of cloning the upstream repository. A copy keeps the in-source
+# build from modifying the original tree.
+# Assumes cwd is $SOURCE_DIR
+function get_local_shotcut {
+  local src
+  src=$(cd "$SHOTCUT_LOCAL_SOURCE" && pwd) || die "Unable to change to directory $SHOTCUT_LOCAL_SOURCE"
+  case "$(pwd)/" in
+    "$src"/*) die "SOURCE_DIR ($(pwd)) must not be inside SHOTCUT_LOCAL_SOURCE ($src)" ;;
+  esac
+  feedback_status "Copying local Shotcut source from $src"
+  cmd rm -rf shotcut || die "Unable to remove old directory shotcut"
+  cmd mkdir shotcut || die "Unable to create directory shotcut"
+  cmd cp -a "$src"/. shotcut/ || die "Unable to copy Shotcut source from $src"
+}
+
+#################################################################
 # get_subproject
 # $1 The sourcedir to get sources for
 # Get the sources for a single project
@@ -1421,8 +1486,10 @@ function get_subproject {
 
   # Note that svn can check out to current directory, whereas git will not. Sigh.
   if test "git" = "$REPOTYPE" ; then
+      if test "shotcut" = "$1" -a -n "$SHOTCUT_LOCAL_SOURCE" ; then
+          get_local_shotcut
       # If the dir is there, check if it is a git repo
-      if test -d "$1" ; then
+      elif test -d "$1" ; then
           # Change to it
           cmd cd $1 || die "Unable to change to directory $1"
           debug "About to look for git repo"
@@ -1878,12 +1945,15 @@ function bundle_libs
 
 function fixlibs()
 {
+  local target basename_target libs lib basename_lib libpath dir
   log bundling and fixing library paths of $(basename "$1")
   target=$(dirname "$1")/$(basename "$1")
   trace fixlibs $target
   basename_target=$(basename "$target")
+  # Bundle everything referenced via @rpath (Qt and libraries built with CMake),
+  # from our prefix, from Qt, and from the package manager prefix.
   libs=$(otool -L "$target" |
-    awk '/^\t@rpath\/Qt/ || /^\t\/opt\/local/ || /^\t\/Applications\// || /^\t\/Users\// {print $1}')
+    awk -v deps="$MACOS_DEPS_PREFIX/" '/^\t@rpath\// || /^\t\/opt\/local/ || /^\t\/Applications\// || /^\t\/Users\// || (/^\t/ && index($1, deps) == 1) {print $1}')
 
   # if the target is a lib, change its id
   if [ $(echo "$1" | grep '\.dylib$') ] || [ $(echo "$1" | grep '\.so$') ]; then
@@ -1893,12 +1963,38 @@ function fixlibs()
   for lib in $libs; do
     basename_lib=$(basename "$lib")
     if [ "$basename_lib" != "$basename_target" ]; then
-      libpath=$(echo $lib | sed "s|@rpath\/Qt|${QTDIR}\/lib\/Qt|")
+      case "$lib" in
+        @rpath/Qt*.framework/*)
+          libpath=$(echo $lib | sed "s|@rpath\/Qt|${QTDIR}\/lib\/Qt|")
+          ;;
+        @rpath/*)
+          libpath=
+          for dir in "$FINAL_INSTALL_DIR/lib" "$QTDIR/lib" "$MACOS_DEPS_PREFIX/lib" "$MACOS_OPENMP_LIB_DIR"; do
+            if [ -e "$dir/${lib#@rpath/}" ]; then
+              libpath="$dir/${lib#@rpath/}"
+              break
+            fi
+          done
+          ;;
+        *)
+          libpath=$lib
+          ;;
+      esac
       if [ $(echo "$lib" | grep -v '\.dylib$') ] && [ $(echo "$lib" | grep -v '\.so$') ]; then
         basename_lib="$basename_lib".dylib
       fi
-      cmd cp -n "$libpath" "Frameworks/$basename_lib"
-      cmd install_name_tool -change "$lib" "@rpath/$basename_lib" "$target"
+      if [ ! -e "Frameworks/$basename_lib" ]; then
+        if [ -n "$libpath" ] && [ -e "$libpath" ]; then
+          cmd cp -n "$libpath" "Frameworks/$basename_lib"
+          # Package manager libraries can be read-only, but install_name_tool needs to write.
+          cmd chmod u+w "Frameworks/$basename_lib"
+        else
+          warn "Unable to find $lib needed by $target"
+        fi
+      fi
+      if [ "$lib" != "@rpath/$basename_lib" ]; then
+        cmd install_name_tool -change "$lib" "@rpath/$basename_lib" "$target"
+      fi
     fi
   done
 
@@ -1944,29 +2040,39 @@ function deploy_mac
 
   log Copying supplementary executables
   cmd mkdir -p MacOS 2>/dev/null
-  cmd cp -a "$FINAL_INSTALL_DIR"/bin/{melt,ffmpeg,ffplay,ffprobe,glaxnimate,gopro2gpx,whisper-cli} MacOS
+  # Only the helpers that were built (some are optional).
+  for exe in melt ffmpeg ffplay ffprobe glaxnimate gopro2gpx whisper-cli; do
+    if [ -e "$FINAL_INSTALL_DIR/bin/$exe" ]; then
+      cmd cp -a "$FINAL_INSTALL_DIR/bin/$exe" MacOS
+    fi
+  done
   cmd mkdir -p Frameworks 2>/dev/null
   cmd cp -p ../../lib/libCuteLogger.dylib Frameworks
   for exe in MacOS/Shotcut MacOS/melt MacOS/ffmpeg MacOS/ffplay MacOS/ffprobe MacOS/glaxnimate; do
+    [ -e "$exe" ] || continue
     fixlibs "$exe"
     log fixing rpath of executable "$exe"
     cmd install_name_tool -delete_rpath "$FINAL_INSTALL_DIR/lib" "$exe" 2> /dev/null
     cmd install_name_tool -delete_rpath "$QTDIR/lib" "$exe" 2> /dev/null
-    cmd install_name_tool -delete_rpath "/opt/local/lib" "$exe" 2> /dev/null
+    cmd install_name_tool -delete_rpath "$MACOS_DEPS_PREFIX/lib" "$exe" 2> /dev/null
     cmd install_name_tool -add_rpath "@executable_path/../Frameworks" "$exe"
   done
-  cmd cp -p /opt/local/lib/libaom.3.dylib Frameworks
+  if [ "$FFMPEG_SUPPORT_AOM" = "1" ]; then
+    cmd cp -p "$MACOS_DEPS_PREFIX"/lib/libaom.3.dylib Frameworks
+  fi
 
   # whisper.cpp
-  cmd cp -p "$FINAL_INSTALL_DIR"/lib/libwhisper.1.dylib Frameworks
-  cmd cp -p "$FINAL_INSTALL_DIR"/lib/libggml*.dylib Frameworks
-  fixlibs MacOS/whisper-cli
-  log fixing rpath of executable "whisper-cli"
-  cmd install_name_tool -delete_rpath "$SOURCE_DIR"/whisper.cpp/build/src MacOS/whisper-cli 2> /dev/null
-  cmd install_name_tool -delete_rpath "$SOURCE_DIR"/whisper.cpp/build/ggml/src MacOS/whisper-cli 2> /dev/null
-  cmd install_name_tool -delete_rpath "$SOURCE_DIR"/whisper.cpp/build/ggml/src/ggml-blas MacOS/whisper-cli 2> /dev/null
-  cmd install_name_tool -delete_rpath "$SOURCE_DIR"/whisper.cpp/build/ggml/src/ggml-metal MacOS/whisper-cli 2> /dev/null
-  cmd install_name_tool -add_rpath "@executable_path/../Frameworks" MacOS/whisper-cli
+  if [ "$ENABLE_WHISPERCPP" = "1" ]; then
+    cmd cp -p "$FINAL_INSTALL_DIR"/lib/libwhisper.1.dylib Frameworks
+    cmd cp -p "$FINAL_INSTALL_DIR"/lib/libggml*.dylib Frameworks
+    fixlibs MacOS/whisper-cli
+    log fixing rpath of executable "whisper-cli"
+    cmd install_name_tool -delete_rpath "$SOURCE_DIR"/whisper.cpp/build/src MacOS/whisper-cli 2> /dev/null
+    cmd install_name_tool -delete_rpath "$SOURCE_DIR"/whisper.cpp/build/ggml/src MacOS/whisper-cli 2> /dev/null
+    cmd install_name_tool -delete_rpath "$SOURCE_DIR"/whisper.cpp/build/ggml/src/ggml-blas MacOS/whisper-cli 2> /dev/null
+    cmd install_name_tool -delete_rpath "$SOURCE_DIR"/whisper.cpp/build/ggml/src/ggml-metal MacOS/whisper-cli 2> /dev/null
+    cmd install_name_tool -add_rpath "@executable_path/../Frameworks" MacOS/whisper-cli
+  fi
 
   # MLT plugins
   log Copying MLT plugins
@@ -2024,8 +2130,10 @@ function deploy_mac
   cmd cp -a "$FINAL_INSTALL_DIR"/share/movit Resources
 
   # VMAF models
-  log Copying VMAF models
-  cmd cp -a "$FINAL_INSTALL_DIR"/share/vmaf Resources
+  if [ "$FFMPEG_SUPPORT_VMAF" = "1" ]; then
+    log Copying VMAF models
+    cmd cp -a "$FINAL_INSTALL_DIR"/share/vmaf Resources
+  fi
 
   # Glaxnimate data
   if [ "$ENABLE_GLAXNIMATE" = "1" ]; then
@@ -2036,11 +2144,13 @@ function deploy_mac
   fi
 
   # Whisper.cpp models
-  log Copying Whisper.cpp models
-  cmd cp -a "$FINAL_INSTALL_DIR"/share/shotcut/whisper_models Resources/shotcut
+  if [ "$ENABLE_WHISPERCPP" = "1" ]; then
+    log Copying Whisper.cpp models
+    cmd cp -a "$FINAL_INSTALL_DIR"/share/shotcut/whisper_models Resources/shotcut
+  fi
 
   log Fixing rpath in libraries
-  cmd find . -name '*.dylib' -exec sh -c "install_name_tool -delete_rpath \"/opt/local/lib/libomp\" {} 2> /dev/null" \;
+  cmd find . -name '*.dylib' -exec sh -c "install_name_tool -delete_rpath \"$MACOS_OPENMP_LIB_DIR\" {} 2> /dev/null" \;
   cmd find . -name '*.dylib' -exec sh -c "install_name_tool -delete_rpath \"$FINAL_INSTALL_DIR/lib\" {} 2> /dev/null" \;
   cmd find . -name '*.so' -exec sh -c "install_name_tool -delete_rpath \"$FINAL_INSTALL_DIR/lib/mlt\" {} 2>/dev/null" \;
   cmd find . -name '*.dylib' -exec sh -c "install_name_tool -delete_rpath \"$QTDIR/lib\" {} 2>/dev/null" \;
