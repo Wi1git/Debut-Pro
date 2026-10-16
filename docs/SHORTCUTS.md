@@ -47,6 +47,16 @@ and **Alt means ⌥ Option**. You can change any shortcut in Settings → Keyboa
 | Zoom timeline in / out | = / - |
 | Zoom to fit | \ |
 
+## Mouse and trackpad in the Timeline and Keyframes panels
+
+| Action | Mouse |
+|---|---|
+| Scroll through time | Scroll wheel (a trackpad scrolls freely in both directions) |
+| Zoom in / out | Alt+scroll (Mac: ⌥ Option+scroll), or Ctrl+scroll (Mac: ⌘ Cmd+scroll) |
+| Make tracks taller / shorter | Shift+scroll |
+| Scroll tracks up / down | Ctrl+Shift+scroll (Mac: ⌘ Cmd+Shift+scroll) |
+| Change a track's volume | Scroll over its volume slider |
+
 ## Project and export
 
 | Action | Key |

@@ -87,34 +87,31 @@ function scrollMax() {
 }
 
 function onMouseWheel(wheel) {
+    // Debut Pro (Premiere-style mouse wheel):
+    //   wheel                      scroll through time (track pads scroll freely)
+    //   Alt/Option + wheel         zoom (Ctrl/Cmd + wheel also zooms)
+    //   Shift + wheel              track height
+    //   Ctrl/Cmd + Shift + wheel   scroll tracks up/down
     var n
-    if ((wheel.modifiers === Qt.ControlModifier) || (wheel.modifiers === Qt.ShiftModifier)) {
-        // Zoom
-        if (wheel.modifiers & Qt.ControlModifier) {
-            adjustZoom(wheel.angleDelta.y / 2000, wheel.x)
-        }
-        if (wheel.modifiers & Qt.ShiftModifier) {
-            n = (application.OS === 'macOS')? wheel.angleDelta.x : wheel.angleDelta.y
-            multitrack.trackHeight = Math.max(10, multitrack.trackHeight + n / 25)
-        }
+    const mods = wheel.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.ShiftModifier)
+    // Some platforms turn a vertical wheel into horizontal deltas while Shift or Alt is held.
+    const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x
+    if (mods === Qt.AltModifier || mods === Qt.ControlModifier) {
+        adjustZoom(delta / 2000, wheel.x)
+    } else if (mods === Qt.ShiftModifier) {
+        multitrack.trackHeight = Math.max(10, multitrack.trackHeight + delta / 25)
+    } else if (mods === (Qt.ControlModifier | Qt.ShiftModifier)) {
+        n = Math.round(delta / 2)
+        tracksFlickable.contentY = clamp(tracksFlickable.contentY - n, 0, scrollMax().y)
+    } else if ((wheel.pixelDelta.x || wheel.pixelDelta.y) && mods === 0) {
+        // Track pads provide both horizontal and vertical.
+        let x = wheel.pixelDelta.x
+        let y = wheel.pixelDelta.y
+        if (!y || Math.abs(x) > 2)
+            tracksFlickable.contentX = clamp(tracksFlickable.contentX - x, 0, scrollMax().x)
+        tracksFlickable.contentY = clamp(tracksFlickable.contentY - y, 0, scrollMax().y)
     } else {
-        // Scroll
-        if ((wheel.pixelDelta.x || wheel.pixelDelta.y) && wheel.modifiers === Qt.NoModifier) {
-            var x = wheel.pixelDelta.x
-            var y = wheel.pixelDelta.y
-            // Track pads provide both horizontal and vertical.
-            if (!y || Math.abs(x) > 2)
-                tracksFlickable.contentX = clamp(tracksFlickable.contentX - x, 0, scrollMax().x)
-            tracksFlickable.contentY = clamp(tracksFlickable.contentY - y, 0, scrollMax().y)
-        } else {
-            // Vertical only mouse wheel requires modifier for vertical scroll.
-            if (wheel.modifiers === Qt.AltModifier) {
-                n = Math.round((application.OS === 'macOS'? wheel.angleDelta.y : wheel.angleDelta.x) / 2)
-                tracksFlickable.contentY = clamp(tracksFlickable.contentY - n, 0, scrollMax().y)
-            } else {
-                n = Math.round(wheel.angleDelta.y / 2)
-                tracksFlickable.contentX = clamp(tracksFlickable.contentX - n, 0, scrollMax().x)
-            }
-        }
+        n = Math.round(delta / 2)
+        tracksFlickable.contentX = clamp(tracksFlickable.contentX - n, 0, scrollMax().x)
     }
 }
