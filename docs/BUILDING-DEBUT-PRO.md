@@ -222,8 +222,8 @@ Measured on the first successful runs (16 October 2026):
 
 | | First run or cache rebuild | With cache |
 |---|---|---|
-| macOS | 22 min (dependencies 12.5, app 5.5, package and checks 3) | about 10 min |
-| Windows | 24 min (MSYS2 setup 2, dependencies 17, app 4.5) | about 8 min |
+| macOS | 22 min (dependencies 12.5, app 5.5, package and checks 3) | about 10 min (estimate) |
+| Windows | 24 min (MSYS2 setup 2, dependencies 17, app 4.5) | 11 min |
 
 macOS jobs can also wait in GitHub's queue for a while before they start.
 
