@@ -19,13 +19,15 @@
 
 #include "Logger.h"
 #include "actions.h"
-#include "dialogs/speechdialog.h"
 #include "dialogs/subtitletrackdialog.h"
-#include "dialogs/transcribeaudiodialog.h"
 #include "jobqueue.h"
-#include "jobs/kokorodokijob.h"
 #include "jobs/meltjob.h"
+#ifndef DEBUT_SLIM
+#include "dialogs/speechdialog.h"
+#include "dialogs/transcribeaudiodialog.h"
+#include "jobs/kokorodokijob.h"
 #include "jobs/whisperjob.h"
+#endif
 #include "mainwindow.h"
 #include "models/subtitlesmodel.h"
 #include "models/subtitlesselectionmodel.h"
@@ -209,8 +211,10 @@ SubtitlesDock::SubtitlesDock(QWidget *parent)
     mainMenu->addAction(Actions["subtitleMoveAction"]);
     mainMenu->addAction(Actions["subtitleBurnInAction"]);
     mainMenu->addAction(Actions["subtitleGenerateTextAction"]);
+#ifndef DEBUT_SLIM
     mainMenu->addAction(Actions["subtitleSpeechToTextAction"]);
-#ifdef EXTERNAL_LAUNCHERS
+#endif
+#if defined(EXTERNAL_LAUNCHERS) && !defined(DEBUT_SLIM)
     mainMenu->addAction(Actions["subtitleTextToSpeechAction"]);
 #endif
     mainMenu->addAction(Actions["subtitleTrackTimelineAction"]);
@@ -277,12 +281,14 @@ SubtitlesDock::SubtitlesDock(QWidget *parent)
     button->setAutoRaise(true);
     toolbar->addWidget(button);
 
+#ifndef DEBUT_SLIM
     button = new QToolButton;
     button->setDefaultAction(Actions["subtitleSpeechToTextAction"]);
     button->setAutoRaise(true);
     toolbar->addWidget(button);
+#endif
 
-#ifdef EXTERNAL_LAUNCHERS
+#if defined(EXTERNAL_LAUNCHERS) && !defined(DEBUT_SLIM)
     button = new QToolButton;
     button->setDefaultAction(Actions["subtitleTextToSpeechAction"]);
     button->setAutoRaise(true);
@@ -457,14 +463,16 @@ void SubtitlesDock::setupActions()
     connect(action, &QAction::triggered, this, &SubtitlesDock::generateTextOnTimeline);
     Actions.add("subtitleGenerateTextAction", action, windowTitle());
 
+#ifndef DEBUT_SLIM
     action = new QAction(tr("Speech to Text..."), this);
     action->setToolTip(tr("Detect speech and transcribe to a new subtitle track."));
     action->setIcon(QIcon::fromTheme("speech-to-text",
                                      QIcon(":/icons/oxygen/32x32/actions/speech-to-text.png")));
     connect(action, &QAction::triggered, this, &SubtitlesDock::speechToText);
     Actions.add("subtitleSpeechToTextAction", action, windowTitle());
+#endif
 
-#ifdef EXTERNAL_LAUNCHERS
+#if defined(EXTERNAL_LAUNCHERS) && !defined(DEBUT_SLIM)
     action = new QAction(tr("Text to Speech..."), this);
     action->setToolTip(tr("Convert the current subtitle track to spoken audio."));
     action->setIcon(
@@ -1059,8 +1067,10 @@ void SubtitlesDock::updateActionAvailablity()
         Actions["subtitleSetEndAction"]->setEnabled(false);
         Actions["subtitleBurnInAction"]->setEnabled(false);
         Actions["subtitleGenerateTextAction"]->setEnabled(false);
+#ifndef DEBUT_SLIM
         Actions["subtitleSpeechToTextAction"]->setEnabled(false);
-#ifdef EXTERNAL_LAUNCHERS
+#endif
+#if defined(EXTERNAL_LAUNCHERS) && !defined(DEBUT_SLIM)
         Actions["subtitleTextToSpeechAction"]->setEnabled(false);
 #endif
     } else {
@@ -1070,8 +1080,10 @@ void SubtitlesDock::updateActionAvailablity()
         Actions["subtitleEditTrackAction"]->setEnabled(true);
         Actions["SubtitleImportAction"]->setEnabled(true);
         Actions["subtitleAddItemAction"]->setEnabled(true);
+#ifndef DEBUT_SLIM
         Actions["subtitleSpeechToTextAction"]->setEnabled(true);
-#ifdef EXTERNAL_LAUNCHERS
+#endif
+#if defined(EXTERNAL_LAUNCHERS) && !defined(DEBUT_SLIM)
         Actions["subtitleTextToSpeechAction"]->setEnabled(true);
 #endif
         if (m_model->trackCount() == 0) {
@@ -1083,7 +1095,7 @@ void SubtitlesDock::updateActionAvailablity()
             Actions["subtitleSetEndAction"]->setEnabled(false);
             Actions["subtitleBurnInAction"]->setEnabled(false);
             Actions["subtitleGenerateTextAction"]->setEnabled(false);
-#ifdef EXTERNAL_LAUNCHERS
+#if defined(EXTERNAL_LAUNCHERS) && !defined(DEBUT_SLIM)
             Actions["subtitleTextToSpeechAction"]->setEnabled(false);
 #endif
         } else {
@@ -1305,6 +1317,7 @@ void SubtitlesDock::generateTextOnTimeline()
     emit addAllTimeline(&playlist, true, true);
 }
 
+#ifndef DEBUT_SLIM
 void SubtitlesDock::speechToText()
 {
     TranscribeAudioDialog dialog(availableTrackName(), this);
@@ -1446,6 +1459,7 @@ void SubtitlesDock::textToSpeech()
         JOBS.add(job);
     });
 }
+#endif // DEBUT_SLIM
 
 void SubtitlesDock::seekToText(QString searchText, int step)
 {

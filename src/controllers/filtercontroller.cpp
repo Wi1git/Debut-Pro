@@ -175,8 +175,12 @@ void FilterController::loadFilterMetadata()
                     // Check if mlt_service is available.
                     if (mltFilters->get_data(meta->mlt_service().toLatin1().constData()) &&
                         // Check if MLT glaxnimate producer is available if needed
+                        // (Debut Pro does not ship the Glaxnimate editor this filter needs.)
                         ("maskGlaxnimate" != meta->objectName()
-                         || mltProducers->get_data("glaxnimate"))
+#ifndef DEBUT_SLIM
+                         || mltProducers->get_data("glaxnimate")
+#endif
+                             )
                         && (version.isEmpty() || meta->isMltVersion(version))) {
                         LOG_DEBUG() << "added filter" << meta->name();
                         meta->loadSettings();

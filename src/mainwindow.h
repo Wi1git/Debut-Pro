@@ -219,8 +219,10 @@ private:
     QTimer m_autosaveTimer;
     int m_exitCode;
     QScopedPointer<QAction> m_statusBarAction;
+#ifndef SHOTCUT_NOUPGRADE
     QNetworkAccessManager m_network;
     QString m_upgradeUrl;
+#endif
     KeyframesDock *m_keyframesDock;
     QDateTime m_clipboardUpdatedAt;
     QDateTime m_sourceUpdatedAt;
@@ -267,7 +269,9 @@ public slots:
     void showSettingsMenu() const;
 
 private slots:
+#ifndef SHOTCUT_NOUPGRADE
     void showUpgradePrompt();
+#endif
     void on_actionAbout_Shotcut_triggered();
     void on_actionOpenOther_triggered();
     void onProducerChanged();
@@ -340,7 +344,9 @@ private slots:
     void on_actionShowToolbar_triggered(bool checked);
     void onToolbarVisibilityChanged(bool visible);
     void on_menuExternal_aboutToShow();
+#ifndef SHOTCUT_NOUPGRADE
     void on_actionUpgrade_triggered();
+#endif
     void on_actionOpenXML_triggered();
     void on_actionShowProjectFolder_triggered();
     void onAutosaveTimeout();
@@ -358,8 +364,10 @@ private slots:
     void on_actionApplicationLog_triggered();
     void on_actionClose_triggered();
     void onPlayerTabIndexChanged(int index);
+#ifndef SHOTCUT_NOUPGRADE
     void onUpgradeCheckFinished(QNetworkReply *reply);
     void onUpgradeTriggered();
+#endif
     void onClipCopied();
     void on_actionExportEDL_triggered();
     void on_actionExportFrame_triggered();
@@ -386,7 +394,9 @@ private slots:
     void onOpenOtherTriggered(QWidget *widget);
     void onOpenOtherFinished(int result);
     void onOpenOtherTriggered();
+#ifndef DEBUT_SLIM
     void onHtmlGeneratorTriggered();
+#endif
     void on_actionClearRecentOnExit_toggled(bool arg1);
     void onSceneGraphInitialized();
     void adjustMainToolbar();

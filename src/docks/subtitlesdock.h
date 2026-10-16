@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 Meltytech, LLC
+ * Copyright (c) 2024-2026 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -86,8 +86,10 @@ private:
     void ensureTrackExists();
     void burnInOnTimeline();
     void generateTextOnTimeline();
+#ifndef DEBUT_SLIM
     void speechToText();
     void textToSpeech();
+#endif
     bool findWhisperExe();
     void seekToText(QString text, int step);
 
@@ -105,7 +107,9 @@ private:
     QLineEdit *m_searchField;
     int m_pos;
     bool m_textEditInProgress;
+#ifndef DEBUT_SLIM
     std::unique_ptr<SpeechDialog> m_speechDialog;
+#endif
 };
 
 #endif // SUBTITLESDOCK_H

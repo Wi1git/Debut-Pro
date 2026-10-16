@@ -128,7 +128,9 @@ private slots:
 
     void on_rotationComboBox_activated(int index);
 
+#ifndef DEBUT_SLIM
     void on_actionExportGPX_triggered();
+#endif
 
     void on_lutButton_clicked();
 

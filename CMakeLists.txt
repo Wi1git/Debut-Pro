@@ -24,6 +24,7 @@ option(CLANG_FORMAT "Enable Clang Format" ON)
 option(BUILD_DOCS "Build QDoc API documentation" OFF)
 option(EXTERNAL_LAUNCHERS "Whether include features to launch external programs; for example, this should be off for Flatpak due to sandbox." ON)
 option(USE_VULKAN "Whether to use Vulkan for hardware video decoding" OFF)
+option(DEBUT_SLIM "Debut Pro: leave out features that go online or need programs Debut Pro does not ship (speech to text, text to speech, HTML generator, Glaxnimate, GoPro2GPX)" ON)
 if (UNIX AND NOT APPLE)
   option(BUILD_MINIMAL_MEDIA_BACKEND "Whether to build the `minimal` Qt media backend for Linux/BSD" OFF)
 endif()
@@ -50,10 +51,13 @@ find_package(Qt6 6.4 REQUIRED
   QuickControls2
   QuickWidgets
   Sql
-  WebSockets
   Widgets
   Xml
 )
+if(NOT DEBUT_SLIM)
+  # Only the HTML generator uses WebSockets (to drive headless Chrome).
+  find_package(Qt6 6.4 REQUIRED COMPONENTS WebSockets)
+endif()
 if(Qt6_VERSION VERSION_GREATER_EQUAL "6.9.0")
   find_package(Qt6 6.4 REQUIRED GuiPrivate)
 endif()

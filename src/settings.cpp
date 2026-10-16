@@ -544,6 +544,11 @@ bool ShotcutSettings::encodeUseHardware() const
     return settings.value("encode/useHardware").toBool();
 }
 
+bool ShotcutSettings::encodeUseHardwareIsSet() const
+{
+    return settings.contains("encode/useHardware");
+}
+
 void ShotcutSettings::setEncodeUseHardware(bool b)
 {
     settings.setValue("encode/useHardware", b);
@@ -564,7 +569,8 @@ void ShotcutSettings::setEncodeHardware(const QStringList &ls)
 
 bool ShotcutSettings::encodeHardwareDecoder() const
 {
-    return settings.value("encode/hardwareDecoder", false).toBool();
+    // Debut Pro: decode with the GPU when exporting too, for speed.
+    return settings.value("encode/hardwareDecoder", true).toBool();
 }
 
 void ShotcutSettings::setEncodeHardwareDecoder(bool b)
@@ -890,7 +896,8 @@ void ShotcutSettings::setPlayerZoom(float f)
 
 int ShotcutSettings::playerPreviewScale() const
 {
-    return settings.value("player/previewScale", 0).toInt();
+    // Debut Pro: scale the preview to 720p by default for smooth playback.
+    return settings.value("player/previewScale", 720).toInt();
 }
 
 void ShotcutSettings::setPlayerPreviewScale(int i)

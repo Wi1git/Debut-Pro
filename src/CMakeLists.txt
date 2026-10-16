@@ -29,7 +29,6 @@ add_executable(shotcut WIN32 MACOSX_BUNDLE
   dialogs/durationdialog.ui
   dialogs/editmarkerdialog.cpp dialogs/editmarkerdialog.h
   dialogs/filedatedialog.cpp dialogs/filedatedialog.h
-  dialogs/filedownloaddialog.cpp dialogs/filedownloaddialog.h
   dialogs/listselectiondialog.cpp dialogs/listselectiondialog.h
   dialogs/listselectiondialog.ui
   dialogs/longuitask.cpp dialogs/longuitask.h
@@ -37,7 +36,6 @@ add_executable(shotcut WIN32 MACOSX_BUNDLE
   dialogs/resourcedialog.cpp dialogs/resourcedialog.h
   dialogs/saveimagedialog.cpp dialogs/saveimagedialog.h
   dialogs/slideshowgeneratordialog.cpp dialogs/slideshowgeneratordialog.h
-  dialogs/speechdialog.h dialogs/speechdialog.cpp
   dialogs/subtitletrackdialog.cpp dialogs/subtitletrackdialog.h
   dialogs/systemsyncdialog.cpp dialogs/systemsyncdialog.h
   dialogs/systemsyncdialog.ui
@@ -45,7 +43,6 @@ add_executable(shotcut WIN32 MACOSX_BUNDLE
   dialogs/textviewerdialog.ui
   dialogs/transcodedialog.cpp dialogs/transcodedialog.h
   dialogs/transcodedialog.ui
-  dialogs/transcribeaudiodialog.cpp dialogs/transcribeaudiodialog.h
   dialogs/unlinkedfilesdialog.cpp dialogs/unlinkedfilesdialog.h
   dialogs/unlinkedfilesdialog.ui
   docks/elementsdock.cpp docks/elementsdock.h
@@ -69,23 +66,17 @@ add_executable(shotcut WIN32 MACOSX_BUNDLE
   docks/timelinedock.cpp docks/timelinedock.h
   FlatpakWrapperGenerator.cpp FlatpakWrapperGenerator.h
   gpuinfo.cpp gpuinfo.h
-  htmlgenerator.h htmlgenerator.cpp
   jobqueue.cpp jobqueue.h
   jobs/abstractjob.cpp jobs/abstractjob.h
   jobs/bitrateviewerjob.h jobs/bitrateviewerjob.cpp
-  jobs/dockerpulljob.h jobs/dockerpulljob.cpp
   jobs/encodejob.cpp jobs/encodejob.h
   jobs/ffmpegjob.cpp jobs/ffmpegjob.h
   jobs/ffprobejob.cpp jobs/ffprobejob.h
-  jobs/gopro2gpxjob.cpp jobs/gopro2gpxjob.h
-  jobs/htmlgeneratorjob.cpp jobs/htmlgeneratorjob.h
-  jobs/kokorodokijob.cpp jobs/kokorodokijob.h
   jobs/meltjob.cpp jobs/meltjob.h
   jobs/postjobaction.cpp jobs/postjobaction.h
   jobs/qimagejob.cpp jobs/qimagejob.h
   jobs/screencapturejob.cpp jobs/screencapturejob.h
   jobs/videoqualityjob.cpp jobs/videoqualityjob.h
-  jobs/whisperjob.cpp jobs/whisperjob.h
   main.cpp
   mainwindow.cpp mainwindow.h
   mainwindow.ui
@@ -97,7 +88,6 @@ add_executable(shotcut WIN32 MACOSX_BUNDLE
   models/attachedfiltersmodel.cpp models/attachedfiltersmodel.h
   models/audiolevelstask.cpp models/audiolevelstask.h
   models/elementsmodel.cpp models/elementsmodel.h
-  models/extensionmodel.cpp models/extensionmodel.h
   models/keyframesmodel.cpp models/keyframesmodel.h
   models/markersmodel.cpp models/markersmodel.h
   models/metadatamodel.cpp models/metadatamodel.h
@@ -187,8 +177,6 @@ add_executable(shotcut WIN32 MACOSX_BUNDLE
   widgets/frameratewidget.cpp widgets/frameratewidget.h
   widgets/glaxnimateproducerwidget.cpp widgets/glaxnimateproducerwidget.h
   widgets/glaxnimateproducerwidget.ui
-  widgets/htmlgeneratorwidget.cpp widgets/htmlgeneratorwidget.h
-  widgets/htmlgeneratorwidget.ui
   widgets/imageproducerwidget.cpp widgets/imageproducerwidget.h
   widgets/imageproducerwidget.ui
   widgets/isingwidget.cpp widgets/isingwidget.h
@@ -312,10 +300,30 @@ target_link_libraries(shotcut
   Qt6::QuickControls2
   Qt6::QuickWidgets
   Qt6::Sql
-  Qt6::WebSockets
   Qt6::Widgets
   Qt6::Xml
 )
+if(DEBUT_SLIM)
+  # Debut Pro never goes online by itself and does not ship whisper.cpp, Docker,
+  # Chrome, Glaxnimate or gopro2gpx, so leave out the features that need them.
+  target_compile_definitions(shotcut PRIVATE DEBUT_SLIM)
+else()
+  target_sources(shotcut PRIVATE
+    dialogs/filedownloaddialog.cpp dialogs/filedownloaddialog.h
+    dialogs/speechdialog.h dialogs/speechdialog.cpp
+    dialogs/transcribeaudiodialog.cpp dialogs/transcribeaudiodialog.h
+    htmlgenerator.h htmlgenerator.cpp
+    jobs/dockerpulljob.h jobs/dockerpulljob.cpp
+    jobs/gopro2gpxjob.cpp jobs/gopro2gpxjob.h
+    jobs/htmlgeneratorjob.cpp jobs/htmlgeneratorjob.h
+    jobs/kokorodokijob.cpp jobs/kokorodokijob.h
+    jobs/whisperjob.cpp jobs/whisperjob.h
+    models/extensionmodel.cpp models/extensionmodel.h
+    widgets/htmlgeneratorwidget.cpp widgets/htmlgeneratorwidget.h
+    widgets/htmlgeneratorwidget.ui
+  )
+  target_link_libraries(shotcut PRIVATE Qt6::WebSockets)
+endif()
 if(UNIX AND NOT APPLE)
   target_link_libraries(shotcut PRIVATE Qt6::DBus X11::X11)
   target_sources(shotcut PRIVATE linuxtools.cpp linuxtools.h)

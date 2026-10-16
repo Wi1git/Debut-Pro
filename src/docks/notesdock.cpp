@@ -19,9 +19,11 @@
 
 #include "Logger.h"
 #include "actions.h"
+#ifndef DEBUT_SLIM
 #include "dialogs/speechdialog.h"
 #include "jobqueue.h"
 #include "jobs/kokorodokijob.h"
+#endif
 #include "mltcontroller.h"
 #include "settings.h"
 #include "util.h"
@@ -65,7 +67,7 @@ public:
         Actions.add("notesIncreaseTextSize", action, objectName());
         connect(action, &QAction::triggered, this, [=]() { setZoom(4); });
 
-#ifdef EXTERNAL_LAUNCHERS
+#if defined(EXTERNAL_LAUNCHERS) && !defined(DEBUT_SLIM)
         icon = QIcon::fromTheme("text-speak", QIcon(":/icons/oxygen/32x32/actions/text-speak.png"));
         action = new QAction(icon, tr("Text to Speech..."), this);
         addAction(action);
@@ -131,8 +133,10 @@ protected:
         }
     }
 
+#ifndef DEBUT_SLIM
 private:
     std::unique_ptr<SpeechDialog> m_speechDialog;
+#endif
 };
 
 NotesDock::NotesDock(QWidget *parent)
@@ -161,7 +165,7 @@ NotesDock::NotesDock(QWidget *parent)
     const auto actions = m_textEdit->actions();
     toolbar->addAction(actions.at(0)); // Decrease Text Size
     toolbar->addAction(actions.at(1)); // Increase Text Size
-#ifdef EXTERNAL_LAUNCHERS
+#if defined(EXTERNAL_LAUNCHERS) && !defined(DEBUT_SLIM)
     toolbar->addSeparator();
     toolbar->addAction(actions.at(2)); // Text to Speech
 #endif

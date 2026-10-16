@@ -27,6 +27,9 @@
 #include <QStandardItemModel>
 #include <QStringList>
 
+#include <atomic>
+#include <memory>
+
 class QTreeWidgetItem;
 class QTemporaryFile;
 namespace Ui {
@@ -175,6 +178,8 @@ private:
     int m_hdrMasterPreset{0}; // 0=BT.2020, 1=P3-D65
     int m_hdrMaxLuminance{1000};
     double m_hdrMinLuminance{0.01};
+    bool m_hwAutoDetectStarted{false};
+    std::shared_ptr<std::atomic_bool> m_hwAutoDetectCancel{std::make_shared<std::atomic_bool>(false)};
 
     void loadPresets();
     Mlt::Properties *collectProperties(int realtime, bool includeProfile = false);
@@ -210,6 +215,7 @@ private:
     void hideResampleWarning(bool hide = true);
     void checkFrameRate();
     void setResolutionAspectFromProfile();
+    void autoDetectHardwareEncoders();
 };
 
 #endif // ENCODEDOCK_H

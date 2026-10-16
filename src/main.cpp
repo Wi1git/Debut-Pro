@@ -59,6 +59,10 @@ constexpr const auto kWatchdogEnvVar = "SHOTCUT_WATCHDOG";
 constexpr const auto kStartupHangTimeoutMs = 240000;
 // Printed by the child to stdout once its main window is shown; watched for by the parent.
 constexpr const auto kStartupReadyMarker = "[Info   ] Debut Pro window shown";
+// Local IPC channel (Unix domain socket or Windows named pipe, never TCP) on which the
+// watchdog parent forwards file-open events to the child. Distinct from Shotcut's name
+// so that the two applications never talk to each other.
+constexpr const auto kFileOpenServerName = "debutpro-file-open";
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
 static QString s_qpaPlatformNote;
@@ -211,11 +215,13 @@ public:
         QCommandLineOption noupgradeOption(
             "noupgrade", QCoreApplication::translate("main", "Hide upgrade prompt and menu item."));
         parser.addOption(noupgradeOption);
+#ifndef DEBUT_SLIM
         QCommandLineOption
             glaxnimateOption("glaxnimate",
                              QCoreApplication::translate("main",
                                                          "Run Glaxnimate instead of Shotcut."));
         parser.addOption(glaxnimateOption);
+#endif
         QCommandLineOption gpuOption("gpu",
                                      QCoreApplication::translate("main", "Use GPU processing."));
         parser.addOption(gpuOption);
@@ -274,6 +280,7 @@ public:
             "[FILE]...",
             QCoreApplication::translate("main", "Zero or more files or folders to open"));
         parser.process(arguments());
+#ifndef DEBUT_SLIM
         if (parser.isSet(glaxnimateOption)) {
             QStringList args = arguments();
             if (!args.isEmpty())
@@ -283,6 +290,7 @@ public:
             if (child.startDetached(Settings.glaxnimatePath(), args))
                 ::exit(EXIT_SUCCESS);
         }
+#endif
 
 #ifdef Q_OS_WIN
         isFullScreen = false;
@@ -390,7 +398,7 @@ protected:
                 bool sent = false;
                 for (int i = 0; i < 15 && !sent; ++i) {
                     QLocalSocket socket;
-                    socket.connectToServer("shotcut-file-open");
+                    socket.connectToServer(kFileOpenServerName);
                     if (socket.waitForConnected(1000)) {
                         socket.write(openEvent->file().toUtf8());
                         socket.waitForBytesWritten(500);
@@ -637,8 +645,10 @@ int main(int argc, char **argv)
         // QFileOpenEvent file paths (e.g. files opened from Finder on macOS)
         // to this child process which holds the actual main window.
         QLocalServer fileOpenServer;
-        QLocalServer::removeServer("shotcut-file-open");
-        fileOpenServer.listen("shotcut-file-open");
+        QLocalServer::removeServer(kFileOpenServerName);
+        // Only the same user (the watchdog parent) may connect.
+        fileOpenServer.setSocketOptions(QLocalServer::UserAccessOption);
+        fileOpenServer.listen(kFileOpenServerName);
         QObject::connect(&fileOpenServer, &QLocalServer::newConnection, [&]() {
             QLocalSocket *socket = fileOpenServer.nextPendingConnection();
             QObject::connect(socket, &QLocalSocket::readyRead, [socket, &a]() {
