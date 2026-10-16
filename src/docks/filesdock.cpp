@@ -974,7 +974,7 @@ void FilesDock::setupActions()
 
     action = new QAction(tr("Go Up"), this);
     action->setToolTip(tr("Show the parent folder"));
-    action->setShortcut({Qt::ALT | Qt::Key_Backspace});
+    // Alt+Backspace (Option+Delete on macOS) is Ripple Delete in the timeline.
     icon = QIcon::fromTheme("lift", QIcon(":/icons/oxygen/32x32/actions/lift.png"));
     action->setIcon(icon);
     connect(action, &QAction::triggered, this, [=]() {

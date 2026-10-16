@@ -48,6 +48,7 @@ class TimelineDock : public QDockWidget
     Q_PROPERTY(bool isRecording READ isRecording NOTIFY isRecordingChanged)
     Q_PROPERTY(int loopStart READ loopStart NOTIFY loopChanged)
     Q_PROPERTY(int loopEnd READ loopEnd NOTIFY loopChanged)
+    Q_PROPERTY(bool razorTool READ isRazorTool WRITE setRazorTool NOTIFY toolChanged)
 
 public:
     explicit TimelineDock(QWidget *parent = 0);
@@ -96,6 +97,11 @@ public:
     void getSelectionRange(int *start, int *end);
     int loopStart() const { return m_loopStart; }
     int loopEnd() const { return m_loopEnd; }
+    bool isRazorTool() const { return m_razorTool; }
+    void setRazorTool(bool razor);
+    Q_INVOKABLE void splitAllTracksAt(int position);
+    void addTransitionAtCut(bool audioCrossfade);
+    void seekClipEdge(bool toOutPoint);
 
 signals:
     void currentTrackChanged();
@@ -131,6 +137,7 @@ signals:
     void updateThumbnails(int trackIndex, int clipIndex);
     void trimStarted();
     void trimEnded();
+    void toolChanged();
 
 public slots:
     int addAudioTrack();
@@ -273,6 +280,7 @@ private:
     int m_loopStart{-1};
     int m_loopEnd{-1};
     bool m_pendingClearSelectionIfInvalid{false};
+    bool m_razorTool{false};
 
 private slots:
     void load(bool force);

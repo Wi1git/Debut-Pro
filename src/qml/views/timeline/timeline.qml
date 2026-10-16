@@ -667,6 +667,98 @@ Rectangle {
                                 }
                             }
                         }
+
+                        MouseArea {
+                            // Razor tool: covers the clips while active, shows where the
+                            // cut will be and splits the clip under the mouse on click.
+                            id: razorMouseArea
+
+                            property int hoverTrack: -1
+                            property int hoverFrame: -1
+                            property bool allTracks: false
+
+                            function trackIndexAt(y) {
+                                for (let i = 0; i < tracksRepeater.count; i++) {
+                                    const track = tracksRepeater.itemAt(i);
+                                    if (y >= track.y && y < track.y + track.height)
+                                        return i;
+                                }
+                                return -1;
+                            }
+
+                            function clipIndexAt(trackIndex, frame) {
+                                const track = tracksRepeater.itemAt(trackIndex);
+                                for (let i = 0; track && i < track.clipCount; i++) {
+                                    const clip = track.clipAt(i);
+                                    if (clip && frame > clip.clipStart && frame < clip.clipStart + clip.clipDuration)
+                                        return (clip.isBlank || clip.isTransition) ? -1 : i;
+                                }
+                                return -1;
+                            }
+
+                            function frameAt(x) {
+                                let frame = Math.round(x / multitrack.scaleFactor);
+                                // Snap to the playhead when it is close.
+                                const playheadX = timeline.position * multitrack.scaleFactor;
+                                if (settings.timelineSnap && Math.abs(x - playheadX) < 10)
+                                    frame = timeline.position;
+                                return frame;
+                            }
+
+                            function updateHover(mouse) {
+                                allTracks = !!(mouse.modifiers & Qt.ShiftModifier);
+                                hoverFrame = frameAt(mouse.x);
+                                hoverTrack = trackIndexAt(mouse.y);
+                                // Shift splits every track, so it does not need a clip under the mouse.
+                                if (hoverTrack >= 0 && !allTracks && clipIndexAt(hoverTrack, hoverFrame) < 0)
+                                    hoverTrack = -1;
+                            }
+
+                            anchors.fill: parent
+                            enabled: timeline.razorTool
+                            visible: enabled
+                            hoverEnabled: true
+                            acceptedButtons: Qt.LeftButton
+                            cursorShape: Qt.CrossCursor
+                            onEnabledChanged: hoverTrack = -1
+                            onExited: hoverTrack = -1
+                            onPositionChanged: mouse => updateHover(mouse)
+                            onPressed: mouse => updateHover(mouse)
+                            onClicked: mouse => {
+                                updateHover(mouse);
+                                if (hoverTrack < 0)
+                                    return;
+                                timeline.currentTrack = hoverTrack;
+                                if (allTracks)
+                                    timeline.splitAllTracksAt(hoverFrame);
+                                else
+                                    timeline.split(hoverTrack, clipIndexAt(hoverTrack, hoverFrame), hoverFrame);
+                                hoverTrack = -1;
+                            }
+
+                            Repeater {
+                                // The cut line, on the clip under the mouse or on every track.
+                                model: razorMouseArea.hoverTrack >= 0 ? tracksRepeater.count : 0
+
+                                Rectangle {
+                                    property var track: tracksRepeater.itemAt(index)
+
+                                    visible: !!track && (razorMouseArea.allTracks ? razorMouseArea.clipIndexAt(index, razorMouseArea.hoverFrame) >= 0 : index === razorMouseArea.hoverTrack)
+                                    x: razorMouseArea.hoverFrame * multitrack.scaleFactor - 1
+                                    y: track ? track.y : 0
+                                    width: 2
+                                    height: track ? track.height : 0
+                                    color: 'white'
+
+                                    Rectangle {
+                                        x: parent.width
+                                        width: 1
+                                        height: parent.height
+                                        color: 'black'
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     Rectangle {
