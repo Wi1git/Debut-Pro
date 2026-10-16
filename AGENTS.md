@@ -29,12 +29,12 @@ Where things are:
 | Hardware-encoder auto-detect | `EncodeDock` (`src/docks/encodedock.cpp`) |
 | CI (Mac + Windows) | `.github/workflows/build-macos.yml`, `build-windows.yml`, `scripts/ci/`, notes and first-run watch list in `docs/BUILDING-DEBUT-PRO.md` |
 
-Status as of 2026-10-15: all features above build and were tested on Linux
-(Qt 6.10.2, MLT 7.43). **The macOS and Windows workflows had never run yet** when
-this was written. The first job of a new session is usually to push, watch both
-workflows, and fix failures using the ranked watch list in
-`docs/BUILDING-DEBUT-PRO.md`. Commit small fixes and re-run until both artifacts
-(`DebutPro-macos-arm64.dmg`, `DebutPro-windows-x64.zip`) are produced.
+Status as of 2026-10-16: all features above build and were tested on Linux
+(Qt 6.10.2, MLT 7.43). Both CI workflows pass and produce
+`DebutPro-macos-arm64.dmg` and `DebutPro-windows-x64.zip`; the first runs and
+the fixes they needed are described under "What to watch on CI runs" in
+`docs/BUILDING-DEBUT-PRO.md`, which also lists what to check when a later run
+breaks. The packages have not yet been tried on a real Mac or Windows PC.
 
 ---
 

@@ -99,6 +99,9 @@ new setting is documented at the top of the script):
   dependency with `SUBDIRS_EXCLUDE="shotcut"`, then only the app with
   `SUBDIRS="shotcut"`.
 - `MLT_ADDITIONAL_OPTIONS`: extra CMake options for MLT.
+- `MLT_ADDITIONAL_CFLAGS` (macOS script): extra compiler flags for MLT. The
+  Mac build sets `-DMELT_NOSDL`, because `melt.c` otherwise includes `SDL.h`
+  on macOS even when SDL is switched off.
 - `ENABLE_AOM` (Windows script): AOM can now be switched off like the other
   optional parts.
 - macOS only: `MACOS_ARCHITECTURES` (upstream builds universal
@@ -110,6 +113,11 @@ new setting is documented at the top of the script):
   Glaxnimate, VMAF, AOM, GoPro2GPX) was not built, and the macOS bundling step
   also copies libraries that are referenced through `@rpath` or come from
   Homebrew.
+- macOS script only: each `git clone` is retried up to four times
+  (chromium.googlesource.com, where libvpx lives, sometimes answers HTTP
+  503), and MLT is configured with this build's prefix ahead of Qt in
+  `CMAKE_PREFIX_PATH`, because Qt's macOS package contains the older FFmpeg
+  of its Multimedia backend in `Qt/<version>/macos/lib`.
 
 Each workflow:
 
@@ -210,12 +218,14 @@ then not notice MLT changes).
 
 ### Expected durations
 
-These are estimates; check the first runs.
+Measured on the first successful runs (16 October 2026):
 
 | | First run or cache rebuild | With cache |
 |---|---|---|
-| macOS | 60–100 min | 25–40 min |
-| Windows | 70–120 min | 35–55 min |
+| macOS | 22 min (dependencies 12.5, app 5.5, package and checks 3) | about 10 min |
+| Windows | 24 min (MSYS2 setup 2, dependencies 17, app 4.5) | about 8 min |
+
+macOS jobs can also wait in GitHub's queue for a while before they start.
 
 Each job stops after 300 minutes (GitHub's maximum is 360).
 
@@ -234,10 +244,21 @@ On Windows, run `scripts/build-shotcut-msys2.sh` from an MSYS2 UCRT64 shell
 with the packages listed in `build-windows.yml`. For everyday development,
 `AGENTS.md` describes the CMake preset, which uses your own Qt and MLT.
 
-## What to watch on the first CI runs
+## What to watch on CI runs
 
-These are the assumptions made without being able to run the builds, roughly
-ordered from most to least likely to break the first run.
+The first runs (16 October 2026) went like this. Windows passed on the first
+try. macOS needed three fixes, all in `scripts/build-shotcut.sh` and
+`scripts/ci/macos.conf`: `melt` failed to compile because it included
+`SDL.h` (now built with `-DMELT_NOSDL`); a clone of libvpx failed with HTTP 503
+(clones are now retried); and MLT's avformat module linked Qt's bundled FFmpeg
+instead of ours (our prefix now comes first). Both packages passed every check
+in the "Verify the package" step.
+
+The list below was written before the first runs, from the assumptions that
+could not be tested without them, roughly ordered from most to least likely to
+break. Points 1 and 2 held up after the fixes above; the rest remain worth
+knowing when a later run breaks, for example after a Homebrew, MSYS2 or Qt
+update.
 
 1. **macOS dependencies on Homebrew instead of MacPorts.** Upstream builds
    macOS outside GitHub with MacPorts; this is the first time the script runs
