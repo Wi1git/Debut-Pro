@@ -1472,6 +1472,23 @@ function get_local_shotcut {
 }
 
 #################################################################
+# git_clone
+# $1 The subproject (the directory the clone creates)
+# $2 The repository URL
+# Clones with a few retries: servers such as chromium.googlesource.com
+# sometimes answer with HTTP 503 for a moment.
+# Assumes cwd is $SOURCE_DIR
+function git_clone {
+  local attempt
+  for attempt in 1 2 3 4; do
+    cmd git --no-pager clone --quiet --recurse-submodules "$2" && return 0
+    cmd rm -rf "$1"
+    [ $attempt -lt 4 ] && warn "Cloning $2 failed (attempt $attempt), retrying" && sleep $((attempt * 20))
+  done
+  return 1
+}
+
+#################################################################
 # get_subproject
 # $1 The sourcedir to get sources for
 # Get the sources for a single project
@@ -1527,7 +1544,7 @@ function get_subproject {
           # No git repo
           debug "No git repo, need to check out"
           feedback_status "Cloning git sources for $1"
-          cmd git --no-pager clone --quiet --recurse-submodules $REPOLOC || die "Unable to git clone source for $1 from $REPOLOC"
+          git_clone "$1" "$REPOLOC" || die "Unable to git clone source for $1 from $REPOLOC"
           cmd cd $1 || die "Unable to change to directory $1"
           cmd git checkout --recurse-submodules $REVISION || die "Unable to git checkout $REVISION"
       fi
