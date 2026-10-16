@@ -20,6 +20,7 @@
 #include "Logger.h"
 #include "actions.h"
 #include "dialogs/durationdialog.h"
+#include "docks/timelinedock.h"
 #include "mainwindow.h"
 #include "proxymanager.h"
 #include "scrubbar.h"
@@ -495,7 +496,8 @@ void Player::setupActions()
     Actions.add("playerPlayPauseAction", action);
 
     action = new QAction(tr("Loop"), this);
-    action->setShortcut(QKeySequence(Qt::Key_Backslash));
+    // Backslash zooms the timeline to fit.
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L));
     action->setIcon(
         QIcon::fromTheme("media-playback-loop",
                          QIcon(":/icons/oxygen/32x32/actions/media-playback-loop.png")));
@@ -657,6 +659,16 @@ void Player::setupActions()
     connect(action, &QAction::triggered, this, &Player::previousFrame);
     Actions.add("playerPreviousFrameAction", action);
 
+    action = new QAction(tr("Forward Five Frames"), this);
+    action->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Right));
+    connect(action, &QAction::triggered, this, [&]() { seekBy(5); });
+    Actions.add("playerForwardFiveFramesAction", action, tr("Player"));
+
+    action = new QAction(tr("Backward Five Frames"), this);
+    action->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Left));
+    connect(action, &QAction::triggered, this, [&]() { seekBy(-5); });
+    Actions.add("playerBackwardFiveFramesAction", action, tr("Player"));
+
     action = new QAction(tr("Forward One Second"), this);
     action->setShortcut(QKeySequence(Qt::Key_PageDown));
     connect(action, &QAction::triggered, this, [&]() { seekBy(qRound(MLT.profile().fps())); });
@@ -747,6 +759,40 @@ void Player::setupActions()
         }
     });
     Actions.add("playerSetOutAction", action);
+
+    // On the Project tab the timeline has no In/Out marks; I and O trim the clip
+    // under the playhead, so these go to the edges of that clip instead.
+    action = new QAction(tr("Seek In Point"), this);
+    action->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_I));
+    connect(action, &QAction::triggered, this, [&]() {
+        if (tabIndex() == Player::SourceTabIndex && MLT.isSeekableClip()) {
+            seek(MLT.producer()->get_in());
+        } else if (tabIndex() == Player::ProjectTabIndex && MLT.isMultitrack()) {
+            MAIN.timelineDock()->seekClipEdge(false);
+        }
+    });
+    Actions.add("playerGoToInAction", action, tr("Player"));
+
+    action = new QAction(tr("Seek Out Point"), this);
+    action->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_O));
+    connect(action, &QAction::triggered, this, [&]() {
+        if (tabIndex() == Player::SourceTabIndex && MLT.isSeekableClip()) {
+            seek(MLT.producer()->get_out());
+        } else if (tabIndex() == Player::ProjectTabIndex && MLT.isMultitrack()) {
+            MAIN.timelineDock()->seekClipEdge(true);
+        }
+    });
+    Actions.add("playerGoToOutAction", action, tr("Player"));
+
+    action = new QAction(tr("Clear In/Out Points"), this);
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X));
+    connect(action, &QAction::triggered, this, [&]() {
+        if (tabIndex() == Player::SourceTabIndex && MLT.isSeekableClip()) {
+            setOut(m_duration - 1);
+            setIn(0);
+        }
+    });
+    Actions.add("playerClearInOutAction", action, tr("Player"));
 
     action = new QAction(tr("Set Time Position"), this);
     action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_T));

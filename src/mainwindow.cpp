@@ -311,11 +311,8 @@ void MainWindow::setupAndConnectUndoStack()
     undoAction->setIconText(tr("Undo"));
     redoAction->setIconText(tr("Redo"));
     undoAction->setShortcut(QString::fromLatin1("Ctrl+Z"));
-#ifdef Q_OS_WIN
-    redoAction->setShortcut(QString::fromLatin1("Ctrl+Y"));
-#else
-    redoAction->setShortcut(QString::fromLatin1("Ctrl+Shift+Z"));
-#endif
+    redoAction->setShortcuts({QKeySequence(QString::fromLatin1("Ctrl+Shift+Z")),
+                              QKeySequence(QString::fromLatin1("Ctrl+Y"))});
     undoAction->setWhatsThis(
         QString::fromLatin1("https://forum.shotcut.org/t/undo-and-redo/12979/1"));
     redoAction->setWhatsThis(
@@ -2866,6 +2863,12 @@ void MainWindow::setupActions()
     addAction(action);
     Actions.add("timelineReload", action, tr("Timeline"));
 
+    action = new QAction(tr("Show Export Panel"), this);
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
+    connect(action, &QAction::triggered, this, [&]() { onEncodeTriggered(true); });
+    addAction(action);
+    Actions.add("exportShowPanelAction", action, tr("Export"));
+
     action = new QAction(tr("Rerun Filter Analysis"), this);
     connect(action, &QAction::triggered, this, [&](bool checked) {
         FindAnalysisFilterParser parser;
@@ -2961,6 +2964,22 @@ void MainWindow::setupActions()
     addAction(Actions["keyframesRemoveAction"]);
     addAction(Actions["filesSearch"]);
     addAction(Actions["playlistSearch"]);
+    // Keep these shortcuts working when their panel is hidden.
+    addAction(Actions["playerForwardFiveFramesAction"]);
+    addAction(Actions["playerBackwardFiveFramesAction"]);
+    addAction(Actions["playerGoToInAction"]);
+    addAction(Actions["playerGoToOutAction"]);
+    addAction(Actions["playerClearInOutAction"]);
+    addAction(Actions["playlistAddFilesAction"]);
+    addAction(Actions["timelineApplyCopiedFiltersAction"]);
+    addAction(Actions["timelineUngroupAction"]);
+    addAction(Actions["timelineSelectionToolAction"]);
+    addAction(Actions["timelineRazorToolAction"]);
+    addAction(Actions["timelineAddTransitionAction"]);
+    addAction(Actions["timelineAddAudioCrossfadeAction"]);
+    // Up/Down go to edit points only while the timeline or the player has focus.
+    m_player->addAction(Actions["timelinePreviousEditAction"]);
+    m_player->addAction(Actions["timelineNextEditAction"]);
 
     Actions.initializeShortcuts();
     mirrorViewActionShortcuts();
@@ -3413,6 +3432,28 @@ void MainWindow::removeCustomProfiles(const QStringList &profiles,
     }
 }
 
+// Returns true when the keyboard focus is in an editable text field or spin box,
+// either a widget or a QML text input.
+static bool isTextInputFocused()
+{
+    QWidget *widget = QApplication::focusWidget();
+    if (!widget)
+        return false;
+    if (auto lineEdit = qobject_cast<QLineEdit *>(widget))
+        return !lineEdit->isReadOnly();
+    if (auto textEdit = qobject_cast<QTextEdit *>(widget))
+        return !textEdit->isReadOnly();
+    if (auto plainTextEdit = qobject_cast<QPlainTextEdit *>(widget))
+        return !plainTextEdit->isReadOnly();
+    if (auto spinBox = qobject_cast<QAbstractSpinBox *>(widget))
+        return !spinBox->isReadOnly();
+    if (auto quickWidget = qobject_cast<QQuickWidget *>(widget)) {
+        QQuickItem *item = quickWidget->quickWindow()->activeFocusItem();
+        return item && (item->flags() & QQuickItem::ItemAcceptsInputMethod);
+    }
+    return false;
+}
+
 // Drag-n-drop events
 
 bool MainWindow::eventFilter(QObject *target, QEvent *event)
@@ -3439,6 +3480,20 @@ bool MainWindow::eventFilter(QObject *target, QEvent *event)
             return true;
         }
         return false;
+    } else if (event->type() == QEvent::ShortcutOverride) {
+        // Text fields already keep plain letters, Delete and Backspace. Let them also keep
+        // Up/Down (spin boxes) and Alt+Backspace (delete word) instead of triggering the
+        // edit point and Ripple Delete shortcuts.
+        auto keyEvent = static_cast<QKeyEvent *>(event);
+        const auto modifiers = keyEvent->modifiers() & ~Qt::KeypadModifier;
+        const bool arrow = (keyEvent->key() == Qt::Key_Up || keyEvent->key() == Qt::Key_Down)
+                           && modifiers == Qt::NoModifier;
+        const bool deleteWord = keyEvent->key() == Qt::Key_Backspace
+                                && modifiers == Qt::AltModifier;
+        if ((arrow || deleteWord) && isTextInputFocused()) {
+            keyEvent->accept();
+            return true;
+        }
     } else if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) {
         if (QEvent::KeyPress == event->type()) {
             // Let Shift+Escape be a global hook to defocus a widget (assign global player focus).

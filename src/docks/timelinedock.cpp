@@ -273,6 +273,7 @@ TimelineDock::TimelineDock(QWidget *parent)
     selectionMenu->addAction(Actions["timelineCurrentTrackAboveAction"]);
     selectionMenu->addAction(Actions["timelineCurrentTrackBelowAction"]);
     selectionMenu->addAction(Actions["timelineGroupAction"]);
+    selectionMenu->addAction(Actions["timelineUngroupAction"]);
     m_mainMenu->addMenu(selectionMenu);
     QMenu *editMenu = new QMenu(tr("Edit"), this);
     editMenu->addAction(Actions["timelinePasteAction"]);
@@ -290,7 +291,13 @@ TimelineDock::TimelineDock(QWidget *parent)
     editMenu->addAction(Actions["timelineSplitAllTracksAction"]);
     editMenu->addAction(Actions["timelineApplyCopiedFiltersAction"]);
     editMenu->addAction(Actions["timelineFreezeFrameAction"]);
+    editMenu->addAction(Actions["timelineAddTransitionAction"]);
+    editMenu->addAction(Actions["timelineAddAudioCrossfadeAction"]);
     m_mainMenu->addMenu(editMenu);
+    QMenu *toolsMenu = new QMenu(tr("Tools"), this);
+    toolsMenu->addAction(Actions["timelineSelectionToolAction"]);
+    toolsMenu->addAction(Actions["timelineRazorToolAction"]);
+    m_mainMenu->addMenu(toolsMenu);
     QMenu *viewMenu = new QMenu(tr("View"), this);
     viewMenu->addAction(Actions["timelineZoomOutAction"]);
     viewMenu->addAction(Actions["timelineZoomInAction"]);
@@ -340,6 +347,9 @@ TimelineDock::TimelineDock(QWidget *parent)
     menuButton->setPopupMode(QToolButton::QToolButton::InstantPopup);
     menuButton->setMenu(m_mainMenu);
     toolbar->addWidget(menuButton);
+    toolbar->addSeparator();
+    toolbar->addAction(Actions["timelineSelectionToolAction"]);
+    toolbar->addAction(Actions["timelineRazorToolAction"]);
     toolbar->addSeparator();
     toolbar->addAction(Actions["timelineCutAction"]);
     toolbar->addAction(Actions["timelineCopyAction"]);
@@ -544,7 +554,8 @@ void TimelineDock::setupActions()
     Actions.add("timelineAddAudioTrackAction", action);
 
     action = new QAction(tr("Add Video Track"), this);
-    action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
+    // Ctrl+I is used for importing files.
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_I));
     connect(action, &QAction::triggered, this, [&]() {
         show();
         raise();
@@ -637,7 +648,8 @@ void TimelineDock::setupActions()
     // macOS uses Cmd+M to minimize an app.
     action->setShortcut(QKeySequence(Qt::META | Qt::Key_M));
 #else
-    action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
+    // Ctrl+M shows the Export panel.
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_M));
 #endif
     connect(action, &QAction::triggered, this, [&]() {
         if (!isMultitrackValid())
@@ -726,7 +738,8 @@ void TimelineDock::setupActions()
     Actions.add("timelineSelectAllOnTrackAction", action);
 
     action = new QAction(tr("Select None"), this);
-    action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+    // Ctrl+D adds a transition.
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A));
     connect(action, &QAction::triggered, this, [&]() {
         if (!isMultitrackValid())
             return;
@@ -814,7 +827,8 @@ void TimelineDock::setupActions()
     Actions.add("timelineSelectClipBelowAction", action);
 
     action = new QAction(tr("Set Current Track Above"), this);
-    action->setShortcut(QKeySequence(Qt::Key_Up));
+    // Up and Down go to the previous and next edit point.
+    action->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Up));
     action->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     connect(action, &QAction::triggered, this, [&]() {
         if (!isMultitrackValid() || !isVisible())
@@ -825,7 +839,7 @@ void TimelineDock::setupActions()
     Actions.add("timelineCurrentTrackAboveAction", action);
 
     action = new QAction(tr("Set Current Track Below"), this);
-    action->setShortcut(QKeySequence(Qt::Key_Down));
+    action->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Down));
     action->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     connect(action, &QAction::triggered, this, [&]() {
         if (!isMultitrackValid() || !isVisible())
@@ -834,6 +848,26 @@ void TimelineDock::setupActions()
     });
     m_quickView.addAction(action);
     Actions.add("timelineCurrentTrackBelowAction", action);
+
+    // Up/Down only apply while the timeline or the player has the focus (MainWindow
+    // also adds these to the player) so that lists and spin boxes keep their arrow keys.
+    action = new QAction(tr("Seek Previous Edit"), this);
+    action->setShortcut(QKeySequence(Qt::Key_Up));
+    action->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    connect(action, &QAction::triggered, this, [&]() {
+        Actions["playerSkipPreviousAction"]->trigger();
+    });
+    m_quickView.addAction(action);
+    Actions.add("timelinePreviousEditAction", action, tr("Timeline"));
+
+    action = new QAction(tr("Seek Next Edit"), this);
+    action->setShortcut(QKeySequence(Qt::Key_Down));
+    action->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    connect(action, &QAction::triggered, this, [&]() {
+        Actions["playerSkipNextAction"]->trigger();
+    });
+    m_quickView.addAction(action);
+    Actions.add("timelineNextEditAction", action, tr("Timeline"));
 
     action = new QAction(tr("Select Clip Under Playhead"), this);
     QList<QKeySequence> clipUnderPlayheadShortcuts;
@@ -873,10 +907,8 @@ void TimelineDock::setupActions()
     Actions.add("timelineCutAction", action);
 
     action = new QAction(tr("&Copy"), this);
-    QList<QKeySequence> copyShortcuts;
-    copyShortcuts << QKeySequence(Qt::CTRL | Qt::Key_C);
-    copyShortcuts << QKeySequence(Qt::Key_C);
-    action->setShortcuts(copyShortcuts);
+    // C alone selects the Razor tool.
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_C));
     action->setWhatsThis("https://forum.shotcut.org/t/cut-copy-and-paste-editing/12981/1");
     icon = QIcon::fromTheme("edit-copy", QIcon(":/icons/oxygen/32x32/actions/edit-copy.png"));
     action->setIcon(icon);
@@ -903,10 +935,8 @@ void TimelineDock::setupActions()
     Actions.add("timelineCopyAction", action);
 
     action = new QAction(tr("&Paste"), this);
-    QList<QKeySequence> pasteShortcuts;
-    pasteShortcuts << QKeySequence(Qt::CTRL | Qt::Key_V);
-    pasteShortcuts << QKeySequence(Qt::Key_V);
-    action->setShortcuts(pasteShortcuts);
+    // V alone selects the Selection tool.
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_V));
     action->setWhatsThis("https://forum.shotcut.org/t/cut-copy-and-paste-editing/12981/1");
     icon = QIcon::fromTheme("edit-paste", QIcon(":/icons/oxygen/32x32/actions/edit-paste.png"));
     action->setIcon(icon);
@@ -1001,9 +1031,11 @@ void TimelineDock::setupActions()
 
     action = new QAction(tr("Ripple Delete"), this);
     QList<QKeySequence> deleteShortcuts;
-    deleteShortcuts << QKeySequence(Qt::Key_X);
-    deleteShortcuts << QKeySequence(Qt::SHIFT | Qt::Key_Backspace);
     deleteShortcuts << QKeySequence(Qt::SHIFT | Qt::Key_Delete);
+    // Option+Delete on macOS, which has no forward delete key on laptops.
+    deleteShortcuts << QKeySequence(Qt::ALT | Qt::Key_Backspace);
+    deleteShortcuts << QKeySequence(Qt::SHIFT | Qt::Key_Backspace);
+    deleteShortcuts << QKeySequence(Qt::Key_X);
     action->setShortcuts(deleteShortcuts);
     icon = QIcon::fromTheme("list-remove", QIcon(":/icons/oxygen/32x32/actions/list-remove.png"));
     action->setIcon(icon);
@@ -1017,11 +1049,10 @@ void TimelineDock::setupActions()
     Actions.add("timelineDeleteAction", action);
 
     action = new QAction(tr("Lift"), this);
-    action->setShortcut(QKeySequence(Qt::Key_Z));
     QList<QKeySequence> liftShortcuts;
-    liftShortcuts << QKeySequence(Qt::Key_Z);
-    liftShortcuts << QKeySequence(Qt::Key_Backspace);
     liftShortcuts << QKeySequence(Qt::Key_Delete);
+    liftShortcuts << QKeySequence(Qt::Key_Backspace);
+    liftShortcuts << QKeySequence(Qt::Key_Z);
     action->setShortcuts(liftShortcuts);
     icon = QIcon::fromTheme("lift", QIcon(":/icons/oxygen/32x32/actions/lift.png"));
     action->setIcon(icon);
@@ -1035,7 +1066,8 @@ void TimelineDock::setupActions()
     Actions.add("timelineLiftAction", action);
 
     action = new QAction(tr("Overwrite"), this);
-    action->setShortcut(QKeySequence(Qt::Key_B));
+    // B toggles ripple editing.
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
     icon = QIcon::fromTheme("overwrite", QIcon(":/icons/oxygen/32x32/actions/overwrite.png"));
     action->setIcon(icon);
     connect(action, &QAction::triggered, this, [&]() {
@@ -1048,7 +1080,8 @@ void TimelineDock::setupActions()
     Actions.add("timelineOverwriteAction", action);
 
     action = new QAction(tr("Split At Playhead"), this);
-    action->setShortcut(QKeySequence(Qt::Key_S));
+    // S toggles snapping.
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
     icon = QIcon::fromTheme("slice", QIcon(":/icons/oxygen/32x32/actions/slice.png"));
     action->setIcon(icon);
     connect(action, &QAction::triggered, this, [&]() {
@@ -1112,36 +1145,13 @@ void TimelineDock::setupActions()
     Actions.add("timelineSplitAction", action);
 
     action = new QAction(tr("Split All Tracks At Playhead"), this);
-    action->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_S));
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_K));
     connect(action, &QAction::triggered, this, [&]() {
         if (!isMultitrackValid())
             return;
         show();
         raise();
-        std::vector<int> tracks;
-        std::vector<int> clips;
-        for (int trackIndex = 0; trackIndex < m_model.rowCount(); trackIndex++) {
-            int clipIndex = clipIndexAtPosition(trackIndex, m_position);
-            if (clipIndex < 0 || isBlank(trackIndex, clipIndex)) {
-                continue;
-            }
-            if (isTrackLocked(trackIndex)) {
-                continue;
-            }
-            if (isTransition(trackIndex, clipIndex)) {
-                emit showStatusMessage(tr("You cannot split a transition."));
-                continue;
-            }
-            auto info = m_model.getClipInfo(trackIndex, clipIndex);
-            if (info && m_position > info->start && m_position < info->start + info->frame_count) {
-                tracks.push_back(trackIndex);
-                clips.push_back(clipIndex);
-            }
-        }
-        if (tracks.size() > 0) {
-            setSelection(); // Avoid filter views becoming out of sync
-            MAIN.undoStack()->push(new Timeline::SplitCommand(m_model, tracks, clips, m_position));
-        }
+        splitAllTracksAt(m_position);
     });
     Actions.add("timelineSplitAllTracksAction", action);
 
@@ -1179,7 +1189,8 @@ void TimelineDock::setupActions()
     Actions.add("timelineMarkerAction", action);
 
     action = new QAction(tr("Previous Marker"), this);
-    action->setShortcut(QKeySequence(Qt::Key_Less));
+    action->setShortcuts(
+        {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_M), QKeySequence(Qt::Key_Less)});
     action->setWhatsThis("https://forum.shotcut.org/t/timeline-markers/30535/1");
     icon = QIcon::fromTheme("format-indent-less",
                             QIcon(":/icons/oxygen/32x32/actions/format-indent-less.png"));
@@ -1194,7 +1205,7 @@ void TimelineDock::setupActions()
     Actions.add("timelinePrevMarkerAction", action);
 
     action = new QAction(tr("Next Marker"), this);
-    action->setShortcut(QKeySequence(Qt::Key_Greater));
+    action->setShortcuts({QKeySequence(Qt::SHIFT | Qt::Key_M), QKeySequence(Qt::Key_Greater)});
     action->setWhatsThis("https://forum.shotcut.org/t/timeline-markers/30535/1");
     icon = QIcon::fromTheme("format-indent-more",
                             QIcon(":/icons/oxygen/32x32/actions/format-indent-more.png"));
@@ -1209,7 +1220,8 @@ void TimelineDock::setupActions()
     Actions.add("timelineNextMarkerAction", action);
 
     action = new QAction(tr("Delete Marker"), this);
-    action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_M));
+    // Ctrl+Shift+M goes to the previous marker.
+    action->setShortcut(QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_M));
     connect(action, &QAction::triggered, this, [&]() {
         if (!isMultitrackValid())
             return;
@@ -1292,7 +1304,7 @@ void TimelineDock::setupActions()
     Actions.add("timelineAllowTransitionsAction", action);
 
     action = new QAction(tr("Snap"), this);
-    action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_P));
+    action->setShortcuts({QKeySequence(Qt::Key_S), QKeySequence(Qt::CTRL | Qt::Key_P)});
     icon = QIcon::fromTheme("snap", QIcon(":/icons/oxygen/32x32/actions/snap.png"));
     action->setIcon(icon);
     action->setCheckable(true);
@@ -1319,7 +1331,7 @@ void TimelineDock::setupActions()
     Actions.add("timelineScrubDragAction", action);
 
     action = new QAction(tr("Ripple"), this);
-    action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+    action->setShortcuts({QKeySequence(Qt::Key_B), QKeySequence(Qt::CTRL | Qt::Key_R)});
     icon = QIcon::fromTheme("target", QIcon(":/icons/oxygen/32x32/actions/target.png"));
     action->setIcon(icon);
     action->setCheckable(true);
@@ -1498,7 +1510,7 @@ void TimelineDock::setupActions()
     Actions.add("timelineZoomOutAction", action);
 
     action = new QAction(tr("Zoom Timeline In"), this);
-    action->setShortcut(QKeySequence(Qt::Key_Plus));
+    action->setShortcuts({QKeySequence(Qt::Key_Equal), QKeySequence(Qt::Key_Plus)});
     icon = QIcon::fromTheme("zoom-in", QIcon(":/icons/oxygen/32x32/actions/zoom-in.png"));
     action->setIcon(icon);
     connect(action, &QAction::triggered, this, [&]() {
@@ -1509,7 +1521,7 @@ void TimelineDock::setupActions()
     Actions.add("timelineZoomInAction", action);
 
     action = new QAction(tr("Zoom Timeline To Fit"), this);
-    action->setShortcut(QKeySequence(Qt::Key_0));
+    action->setShortcuts({QKeySequence(Qt::Key_Backslash), QKeySequence(Qt::Key_0)});
     icon = QIcon::fromTheme("zoom-fit-best",
                             QIcon(":/icons/oxygen/32x32/actions/zoom-fit-best.png"));
     action->setIcon(icon);
@@ -1686,6 +1698,7 @@ void TimelineDock::setupActions()
     Actions.add("timelineAlignToReferenceAction", action);
 
     action = new QAction(tr("Apply Copied Filters"), this);
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V));
     action->setEnabled(false);
     connect(action, &QAction::triggered, this, [&]() {
         if (m_selection.selectedClips.length() > 0) {
@@ -1758,14 +1771,15 @@ void TimelineDock::setupActions()
     Actions.add("timelineRebuildAudioWaveformAction", action);
 
     action = new QAction(tr("Ripple Trim Clip In"), this);
-    action->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_I));
+    // Shift+I and Shift+O go to the In and Out points.
+    action->setShortcut(QKeySequence(Qt::Key_Q));
     connect(action, &QAction::triggered, this, [&]() {
         trimClipAtPlayhead(TimelineDock::TrimInPoint, true);
     });
     Actions.add("timelineRippleTrimClipInAction", action);
 
     action = new QAction(tr("Ripple Trim Clip Out"), this);
-    action->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_O));
+    action->setShortcut(QKeySequence(Qt::Key_W));
     connect(action, &QAction::triggered, this, [&]() {
         trimClipAtPlayhead(TimelineDock::TrimOutPoint, true);
     });
@@ -1801,6 +1815,89 @@ void TimelineDock::setupActions()
         action->setEnabled(selection().size() > 1);
     });
     Actions.add("timelineGroupAction", action);
+
+    action = new QAction(tr("Ungroup"), this);
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_G));
+    action->setEnabled(false);
+    connect(action, &QAction::triggered, this, [&]() {
+        auto ungroupCommand = new Timeline::UngroupCommand(m_model);
+        bool grouped = false;
+        for (const auto &point : selection()) {
+            auto info = m_model.getClipInfo(point.y(), point.x());
+            if (info && info->cut && info->cut->property_exists(kShotcutGroupProperty)) {
+                ungroupCommand->removeFromGroup(point.y(), point.x());
+                grouped = true;
+            }
+        }
+        if (grouped)
+            MAIN.undoStack()->push(ungroupCommand);
+        else
+            delete ungroupCommand;
+    });
+    connect(this, &TimelineDock::selectionChanged, action, [=]() {
+        bool enabled = false;
+        for (const auto &point : selection()) {
+            auto info = m_model.getClipInfo(point.y(), point.x());
+            if (info && info->cut && info->cut->property_exists(kShotcutGroupProperty)) {
+                enabled = true;
+                break;
+            }
+        }
+        action->setEnabled(enabled);
+    });
+    Actions.add("timelineUngroupAction", action);
+
+    auto toolGroup = new QActionGroup(this);
+    toolGroup->setExclusive(true);
+
+    action = new QAction(tr("Selection Tool"), this);
+    action->setShortcut(QKeySequence(Qt::Key_V));
+    icon = QIcon::fromTheme("4-direction", QIcon(":/icons/oxygen/32x32/actions/4-direction.png"));
+    action->setIcon(icon);
+    action->setCheckable(true);
+    action->setChecked(true);
+    action->setActionGroup(toolGroup);
+    connect(action, &QAction::triggered, this, [&]() { setRazorTool(false); });
+    connect(this, &TimelineDock::toolChanged, action, [=]() { action->setChecked(!m_razorTool); });
+    Actions.add("timelineSelectionToolAction", action);
+
+    action = new QAction(tr("Razor Tool"), this);
+    action->setShortcut(QKeySequence(Qt::Key_C));
+    action->setToolTip(tr("Razor Tool: click a clip to split it, Shift+click to split all tracks"));
+    icon = QIcon::fromTheme("slice", QIcon(":/icons/oxygen/32x32/actions/slice.png"));
+    action->setIcon(icon);
+    action->setCheckable(true);
+    action->setActionGroup(toolGroup);
+    connect(action, &QAction::triggered, this, [&]() { setRazorTool(true); });
+    connect(this, &TimelineDock::toolChanged, action, [=]() { action->setChecked(m_razorTool); });
+    Actions.add("timelineRazorToolAction", action);
+
+    action = new QAction(tr("Add Default Transition"), this);
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+    action->setToolTip(
+        tr("Add a dissolve and audio crossfade at the cut nearest the playhead on the selected "
+           "clip or the current track"));
+    connect(action, &QAction::triggered, this, [&]() {
+        if (!isMultitrackValid())
+            return;
+        show();
+        raise();
+        addTransitionAtCut(false);
+    });
+    Actions.add("timelineAddTransitionAction", action);
+
+    action = new QAction(tr("Add Audio Crossfade"), this);
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
+    action->setToolTip(tr("Add an audio crossfade at the cut nearest the playhead on an audio "
+                          "track"));
+    connect(action, &QAction::triggered, this, [&]() {
+        if (!isMultitrackValid())
+            return;
+        show();
+        raise();
+        addTransitionAtCut(true);
+    });
+    Actions.add("timelineAddAudioCrossfadeAction", action);
 }
 
 int TimelineDock::addTrackIfNeeded(TrackType trackType)
@@ -2255,6 +2352,9 @@ void TimelineDock::trimClipAtPlayhead(TrimLocation location, bool ripple)
         return;
 
     if (location == TrimInPoint) {
+        // Nothing to trim when the playhead is already at the start of the clip.
+        if (m_position <= info->start)
+            return;
         MAIN.undoStack()->push(new Timeline::TrimClipInCommand(m_model,
                                                                m_markersModel,
                                                                trackIndex,
@@ -3868,6 +3968,223 @@ void TimelineDock::freezeFrame()
     } else {
         emit showStatusMessage(tr("The play head is not over the selected clip."));
     }
+}
+
+/*!
+    \qmlproperty bool TimelineDock::razorTool
+    \brief \c true while the Razor tool is active: clicking a clip splits it.
+*/
+
+void TimelineDock::setRazorTool(bool razor)
+{
+    if (razor == m_razorTool)
+        return;
+    m_razorTool = razor;
+    emit toolChanged();
+}
+
+/*!
+    \qmlmethod void TimelineDock::splitAllTracksAt(int position)
+    \brief Splits the clips on every unlocked track at the timeline frame \a position.
+*/
+
+void TimelineDock::splitAllTracksAt(int position)
+{
+    if (!isMultitrackValid())
+        return;
+    std::vector<int> tracks;
+    std::vector<int> clips;
+    for (int trackIndex = 0; trackIndex < m_model.rowCount(); trackIndex++) {
+        int clipIndex = clipIndexAtPosition(trackIndex, position);
+        if (clipIndex < 0 || isBlank(trackIndex, clipIndex)) {
+            continue;
+        }
+        if (isTrackLocked(trackIndex)) {
+            continue;
+        }
+        if (isTransition(trackIndex, clipIndex)) {
+            emit showStatusMessage(tr("You cannot split a transition."));
+            continue;
+        }
+        auto info = m_model.getClipInfo(trackIndex, clipIndex);
+        if (info && position > info->start && position < info->start + info->frame_count) {
+            tracks.push_back(trackIndex);
+            clips.push_back(clipIndex);
+        }
+    }
+    if (tracks.size() > 0) {
+        setSelection(); // Avoid filter views becoming out of sync
+        MAIN.undoStack()->push(new Timeline::SplitCommand(m_model, tracks, clips, position));
+    }
+}
+
+void TimelineDock::addTransitionAtCut(bool audioCrossfade)
+{
+    if (!isMultitrackValid())
+        return;
+
+    // Use the selected clip, or else the clip under the playhead on the current track.
+    int trackIndex = -1;
+    int clipIndex = -1;
+    const auto selected = selection();
+    if (selected.size() == 1) {
+        trackIndex = selected.first().y();
+        clipIndex = selected.first().x();
+    }
+    if (trackIndex < 0 || clipIndex < 0 || isBlank(trackIndex, clipIndex)
+        || isTransition(trackIndex, clipIndex)) {
+        trackIndex = currentTrack();
+        clipIndex = clipIndexAtPosition(trackIndex, m_position);
+    }
+    if (trackIndex >= 0 && trackIndex < m_model.trackList().size() && clipIndex >= 0
+        && isTransition(trackIndex, clipIndex)) {
+        emit showStatusMessage(tr("There is already a transition at this cut."));
+        return;
+    }
+    if (trackIndex < 0 || trackIndex >= m_model.trackList().size() || clipIndex < 0
+        || isBlank(trackIndex, clipIndex)) {
+        emit showStatusMessage(tr("Select a clip, or put the playhead over a clip on the current "
+                                  "track, to add a transition."));
+        return;
+    }
+    if (audioCrossfade && m_model.trackList().at(trackIndex).type != AudioTrackType) {
+        emit showStatusMessage(tr("Audio crossfades are added on audio tracks. On a video track, "
+                                  "Add Default Transition (%1) crossfades its audio too.")
+                                   .arg(Actions["timelineAddTransitionAction"]->shortcut().toString(
+                                       QKeySequence::NativeText)));
+        return;
+    }
+    if (isTrackLocked(trackIndex)) {
+        emit warnTrackLocked(trackIndex);
+        return;
+    }
+
+    auto info = m_model.getClipInfo(trackIndex, clipIndex);
+    if (!info)
+        return;
+
+    // Pick the cut (left or right edge of the clip) nearest the playhead that has a clip
+    // next to it. A cut is identified by the index of the clip on its left.
+    auto isRealClip = [&](int index) {
+        return index >= 0 && index < clipCount(trackIndex) && !isBlank(trackIndex, index)
+               && !isTransition(trackIndex, index)
+               && !m_model.makeIndex(trackIndex, index)
+                       .data(MultitrackModel::IsAdjustmentRole)
+                       .toBool();
+    };
+    auto hasTransition = [&](int index) {
+        return index >= 0 && index < clipCount(trackIndex) && isTransition(trackIndex, index);
+    };
+    const int leftDistance = qAbs(m_position - info->start);
+    const int rightDistance = qAbs(m_position - (info->start + info->frame_count));
+    QList<int> cuts;
+    if (leftDistance <= rightDistance)
+        cuts << clipIndex - 1 << clipIndex;
+    else
+        cuts << clipIndex << clipIndex - 1;
+    int leftClip = -1;
+    for (int cut : cuts) {
+        if (hasTransition(cut) || hasTransition(cut + 1)) {
+            emit showStatusMessage(tr("There is already a transition at this cut."));
+            return;
+        }
+        if (isRealClip(cut) && isRealClip(cut + 1)) {
+            leftClip = cut;
+            break;
+        }
+    }
+    if (leftClip < 0) {
+        emit showStatusMessage(tr("There is no cut between two clips here."));
+        return;
+    }
+
+    // Transitions use media beyond the edit: frames after the out point of the
+    // left clip and before the in point of the right clip. Center the transition
+    // on the cut when both sides have enough media; otherwise use what is there.
+    auto clipA = m_model.getClipInfo(trackIndex, leftClip);
+    auto clipB = m_model.getClipInfo(trackIndex, leftClip + 1);
+    if (!clipA || !clipB)
+        return;
+    const int wanted = qMax(1, qRound(MLT.profile().fps()));
+    // A transition must leave at least 2 frames of each clip.
+    const int maxRight = qMax(0, qMin(clipA->length - 1 - clipA->frame_out, clipB->frame_count - 2));
+    const int maxLeft = qMax(0, qMin(clipB->frame_in, clipA->frame_count - 2));
+    int left = qMin(wanted / 2, maxLeft);
+    int right = qMin(wanted - left, maxRight);
+    left = qMin(wanted - right, maxLeft);
+    if (left + right <= 0) {
+        emit showStatusMessage(tr("Not enough extra media beyond the clip edges at this cut to "
+                                  "add a transition. Trim the clips first."));
+        return;
+    }
+
+    // These use the same commands as making a transition by trimming a clip edge.
+    const bool useRight = right > 0
+                          && m_model.addTransitionByTrimOutValid(trackIndex, leftClip, -right);
+    const bool useLeftOnly = !useRight && left > 0
+                             && m_model.addTransitionByTrimInValid(trackIndex, leftClip + 1, -left);
+    if (!useRight && !useLeftOnly) {
+        emit showStatusMessage(tr("Unable to add a transition at this cut."));
+        return;
+    }
+
+    setSelection(); // Avoid filter views becoming out of sync
+    MAIN.undoStack()->beginMacro(audioCrossfade ? tr("Add audio crossfade") : tr("Add transition"));
+    if (useRight) {
+        // Extend the left clip into the right clip, then grow the transition leftward.
+        MAIN.undoStack()->push(
+            new Timeline::AddTransitionByTrimOutCommand(m_model, trackIndex, leftClip, -right, 0));
+        // Finish the transition (this is normally done on mouse release).
+        m_model.notifyClipIn(trackIndex, leftClip + 2);
+        if (left > 0 && m_model.trimTransitionInValid(trackIndex, leftClip, left)) {
+            MAIN.undoStack()->push(
+                new Timeline::TrimTransitionInCommand(m_model, trackIndex, leftClip, left));
+            m_model.notifyClipOut(trackIndex, leftClip);
+        } else {
+            left = 0;
+        }
+    } else {
+        // Extend the right clip back into the left clip.
+        MAIN.undoStack()->push(
+            new Timeline::AddTransitionByTrimInCommand(*this, trackIndex, leftClip + 1, -left, 0));
+        m_model.notifyClipOut(trackIndex, leftClip);
+        right = 0;
+    }
+    MAIN.undoStack()->endMacro();
+    setSelection();
+    const int duration = left + right;
+    const QString time = QString::fromLatin1(
+        m_model.tractor()->frames_to_time(duration, mlt_time_clock));
+    QString message;
+    if (duration < wanted) {
+        message = audioCrossfade
+                      ? tr("Added a %1 audio crossfade (shortened: not enough extra media).")
+                      : tr("Added a %1 transition (shortened: not enough extra media).");
+    } else {
+        message = audioCrossfade ? tr("Added a %1 audio crossfade.") : tr("Added a %1 transition.");
+    }
+    emit showStatusMessage(message.arg(time));
+}
+
+void TimelineDock::seekClipEdge(bool toOutPoint)
+{
+    if (!isMultitrackValid())
+        return;
+    int trackIndex = -1;
+    int clipIndex = -1;
+    const auto selected = selection();
+    if (!selected.isEmpty()) {
+        trackIndex = selected.first().y();
+        clipIndex = selected.first().x();
+    } else {
+        trackIndex = currentTrack();
+        clipIndex = clipIndexAtPosition(trackIndex, m_position);
+    }
+    if (trackIndex < 0 || clipIndex < 0 || isBlank(trackIndex, clipIndex))
+        return;
+    auto info = m_model.getClipInfo(trackIndex, clipIndex);
+    if (info)
+        setPosition(toOutPoint ? info->start + info->frame_count - 1 : info->start);
 }
 
 void TimelineDock::onLoopChanged(int start, int end)

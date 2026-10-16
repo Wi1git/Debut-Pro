@@ -624,9 +624,14 @@ void PlaylistDock::setupActions()
 
     action = new QAction(tr("Add Files"), this);
     action->setToolTip(tr("Add files to playlist"));
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
     icon = QIcon::fromTheme("list-add-files",
                             QIcon(":/icons/oxygen/32x32/actions/list-add-files.png"));
     action->setIcon(icon);
+    connect(action, &QAction::triggered, this, [this]() {
+        show();
+        raise();
+    });
     connect(action, &QAction::triggered, this, &PlaylistDock::onAddFilesActionTriggered);
     Actions.add("playlistAddFilesAction", action);
 
@@ -739,13 +744,15 @@ void PlaylistDock::setupActions()
     Actions.add("playlistRemoveAllAction", action);
 
     action = new QAction(tr("Select All"), this);
-    action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A));
+    // Ctrl+Shift+A deselects the timeline.
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_A));
     connect(action, &QAction::triggered, this, &PlaylistDock::onSelectAllActionTriggered);
     action->setEnabled(m_proxyModel->rowCount() > 0);
     Actions.add("playlistSelectAllAction", action);
 
     action = new QAction(tr("Select None"), this);
-    action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
+    // Ctrl+Shift+D adds an audio crossfade in the timeline.
+    action->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_D));
     connect(action, &QAction::triggered, m_selectionModel, &QItemSelectionModel::clearSelection);
     connect(this, &PlaylistDock::selectionChanged, action, [=]() {
         action->setEnabled(m_selectionModel->selection().size() > 0);
